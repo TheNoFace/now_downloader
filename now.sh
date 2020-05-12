@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # TODO:
-# 0) 2020-05-12 해결 | 스크립트 정상 종료 안되는 원인 찾기
+# 0) 스크립트 정상 종료 안되는 원인 찾기
 # 1) wget로 playlist.m3u8을 받아 올 수 없으면 sleep 후 재시도
 # 2) 스트리밍 중단 시 스크립트 재시작
 # 3) 오전 스트리밍 구분 추가
@@ -30,14 +30,17 @@ function getstream()
 	echo
 	#wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
 	#exrefresh
-	echo 방송시간: "$starttime" '/' 현재: "$hour":"$min":"$sec"
-	echo -e '\n'"$title"' E'"$ep"' '"${subject//'\r\n'/}"'\n'"$url"'\n\n'파일 이름': '"${filename//'/'/.}".ts'\n'
+	echo '방송시간: '"$starttime"' / 현재: '"$hour"':'"$min"':'"$sec"
 	# TODO 5)
 	if [ $vcheck = 'true' ]
 	then
+		echo -e '\n'"$title"' E'"$ep"' '"${subject//'\r\n'/}"
+		echo -e 'Audio: '"$url"'\nVideo: '"$vurl"'\n'
+		echo -e '오디오 파일: '"${filename//'/'/.}"'.ts\n비디오 파일: '"${filename//'/'/.}"'_video.ts\n'
 		youtube-dl "$url" --output "$opath"/"${filename//'/'/.}".ts &
-		youtube-dl "$url" --output "$opath"/"${filename//'/'/.}"_video.ts &
+		youtube-dl "$vurl" --output "$opath"/"${filename//'/'/.}"_video.ts
 	else
+		echo -e '\n'"$title"' E'"$ep"' '"${subject//'\r\n'/}"'\n'"$url"'\n\n파일 이름: '"${filename//'/'/.}"'.ts\n'
 		youtube-dl "$url" --output "$opath"/"${filename//'/'/.}".ts
 	fi
 	codec=$(ffprobe -v error -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$opath"/"${filename//'/'/.}".ts)
@@ -95,9 +98,10 @@ function timeupdate()
 
 function counter()
 {
+	echo
 	while [ $timer -gt 0 ]
 	do
-		echo -ne 'sleeping for '"$timer\033[0K"s"\r"
+		echo -ne 'sleeping for '"$timer\033[0K"'s'"\r"
 		sleep 1
 		: $((timer--))
 	done
@@ -112,7 +116,7 @@ function diffdatesleep()
 		timeupdate	
 		echo 'Hour difference: '"$hourcheck"
 		echo 'Min difference: '"$mincheck"
-		echo -e 'Time difference: '"$timecheck"' min\n'
+		echo -e 'Time difference: '"$timecheck"' min'
 		counter
 		echo -e 'content 다시 불러오는 중...\n'
 		wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
@@ -120,7 +124,13 @@ function diffdatesleep()
 		exrefresh
 		echo -e '방송일  : '"${startdate//'-'/}"' / 오늘: '"$date"
 		echo '방송시간: '"${starttime//':'/}"' / 현재: '"$hour$min$sec"
-		echo -e '\n'"$title"' E'"$ep"' '"${subject//'\r\n'/}"'\n'"$url"
+		if [ $vcheck = 'true' ]
+		then
+			echo -e '\n'"$title"' E'"$ep"' '"${subject//'\r\n'/}"
+			echo -e 'Audio: '"$url"'\nVideo: '"$vurl"'\n'
+		else
+			echo -e '\n'"$title"' E'"$ep"' '"${subject//'\r\n'/}"'\n'"$url"
+		fi
 		echo
 		# 시작 시간이 65분 이상 차이
 		if [ $hourcheck -ge 0 ] && [ $timecheck -ge 65 ]
@@ -177,9 +187,9 @@ vcheck=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'video":\K[^,
 # TODO 5)
 if [ $vcheck = 'true' ]
 then
-	echo -e '\n비디오 스트림 발견, 함께 다운로드 합니다\n'
+	echo -e '비디오 스트림 발견, 함께 다운로드 합니다\n'
 else
-	echo -e '\n비디오 스트림 없음, 오디오만 다운로드 합니다\n'
+	echo -e '비디오 스트림 없음, 오디오만 다운로드 합니다\n'
 fi
 
 echo '방송일  : '"${startdate//'-'/}"' / 오늘: '"$date"
@@ -213,7 +223,7 @@ then
 			if [ "$hour$min$sec" -ge "${starttime//':'/}" ]
 			then
 				echo '방송시간: '"${starttime//':'/}"' / 현재: '"$hour$min$sec"
-				echo -e '\n쇼가 시작됨\n'
+				echo -e '쇼가 시작됨\n'
 				break
 			fi
 		done
@@ -227,7 +237,13 @@ then
 elif [ "$date" = "${startdate//'-'/}" ]
 then
 	echo -e '\n방송일입니다'
-	echo -e '\n'"$title"' E'"$ep"' '"${subject//'\r\n'/}"'\n'"$url"'\n'
+	if [ $vcheck = 'true' ]
+	then
+		echo -e '\n'"$title"' E'"$ep"' '"${subject//'\r\n'/}"
+		echo -e 'Audio: '"$url"'\nVideo: '"$vurl"'\n'
+	else
+		echo -e '\n'"$title"' E'"$ep"' '"${subject//'\r\n'/}"'\n'"$url"
+	fi
 	timeupdate
 	exrefresh
 	echo 'Hour difference: '"$hourcheck"
