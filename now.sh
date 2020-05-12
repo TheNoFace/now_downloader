@@ -21,11 +21,11 @@ date=$(date +'%y%m%d')
 
 function getstream()
 {
-	timer=2
+	timer=5
 	counter
 	echo
 	wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
-	url=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'streamUrl":"\K[^"]+')
+	exrefresh
 	echo 방송시간: "$starttime" '/' 현재: "$hour":"$min":"$sec"
 	echo -e '\n'"$title"' E'"$ep"' '"${subject//'\r\n'/}"'\n'"$url"'\n\n'파일 이름': '"${filename//'/'/.}".ts'\n'
 	youtube-dl "$url" --output "$opath"/"${filename//'/'/.}".ts
@@ -63,10 +63,10 @@ function timeupdate()
 	min=$(date +'%M')
 	sec=$(date +'%S')
 	stimehr=$(expr substr "${starttime//':'/}" 1 2)
-	stimemin=$(expr substr "${starttime//':'/}" 1 4)
+	stimemin=$(expr substr "${starttime//':'/}" 3 2)
 	hourcheck=$(expr "$stimehr" - "$hour")
 	mincheck=$(expr "$stimemin" - "$min")
-	timecheck=$(expr "$hourcheck" "*" 60 + "$mincheck")
+	timecheck=$(echo "$hourcheck*60+$mincheck" | bc -l)
 }
 
 function counter()
@@ -86,7 +86,9 @@ function diffdatesleep()
 	do
 		echo -e '방송일이 아닙니다\n'
 		timeupdate	
-		echo 'Time difference: '"$timecheck"'min'
+		echo 'Hour difference: '"$hourcheck"
+		echo 'Min difference: '"$mincheck"
+		echo 'Time difference: '"$timecheck"' min'
 		counter
 		echo -e '\ncontent 새로 고침 중...\n'
 		wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
@@ -141,8 +143,8 @@ function diffdatesleep()
 }
 
 wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
-timeupdate
 exrefresh
+timeupdate
 
 echo '방송일  : '"${startdate//'-'/}"' / 오늘: '"$date"
 echo '방송시간: '"${starttime//':'/}"' / 현재: '"$hour$min$sec"
@@ -194,7 +196,9 @@ then
 	echo -e '\n'"$title"' E'"$ep"' '"${subject//'\r\n'/}"'\n'"$url"'\n'
 	timeupdate
 	exrefresh
-	echo 'Time difference: '"$timecheck"'min'
+	echo 'Hour difference: '"$hourcheck"
+	echo 'Min difference: '"$mincheck"
+	echo 'Time difference: '"$timecheck"' min'
 	# 시작 시간이 됐을 경우
 	if [ "$hour$min$sec" -ge "${starttime//':'/}" ]
 	then
