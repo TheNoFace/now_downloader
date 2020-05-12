@@ -6,6 +6,7 @@
 # 2) 스트리밍 중단 시 스크립트 재시작
 # 3) 오전 스트리밍 구분 추가
 # 4) 날이 하루 이상 차이날 경우 12시간 타이머
+# 5) Video 스트림이 있을 경우 동시 다운로드
 
 if [ $# -ne 1 ]
 then
@@ -18,28 +19,38 @@ fi
 
 opath=/srv/mount/ssd0/now
 date=$(date +'%y%m%d')
+# TODO 5)
+vcheck=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'video":\K[^,]+')
 
 function getstream()
 {
-	timer=5
+	#exrefresh
+	timer=3
 	counter
 	echo
-	wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
-	exrefresh
+	#wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
+	#exrefresh
 	echo 방송시간: "$starttime" '/' 현재: "$hour":"$min":"$sec"
 	echo -e '\n'"$title"' E'"$ep"' '"${subject//'\r\n'/}"'\n'"$url"'\n\n'파일 이름': '"${filename//'/'/.}".ts'\n'
-	youtube-dl "$url" --output "$opath"/"${filename//'/'/.}".ts
+	# TODO 5)
+	if [ $vcheck = 'true' ]
+	then
+		youtube-dl "$url" --output "$opath"/"${filename//'/'/.}".ts &
+		youtube-dl "$url" --output "$opath"/"${filename//'/'/.}"_video.ts &
+	else
+		youtube-dl "$url" --output "$opath"/"${filename//'/'/.}".ts
+	fi
 	codec=$(ffprobe -v error -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$opath"/"${filename//'/'/.}".ts)
 	if [ $codec = mp3 ]
 	then 
 		echo -e '\nCodec: MP3, Saving into mp3 file\n'
 		ffmpeg -i "$opath"/"${filename//'/'/.}".ts -vn -c:a copy "$opath"/"${filename//'/'/.}".mp3
-		echo -e '\n파일 이름: '"${filename//'/'/.}"'.mp3'
+		echo -e '\nConverting Complete ('"${filename//'/'/.}"'.mp3)\n'
 	elif [ $codec = aac ]
 	then
 		echo -e '\nCodec: AAC, Saving into m4a file\n'
 		ffmpeg -i "$opath"/"${filename//'/'/.}".ts -vn -c:a copy "$opath"/"${filename//'/'/.}".m4a
-		echo -e '\n파일 이름: '"${filename//'/'/.}"'.m4a'
+		echo -e '\nConverting Complete ('"${filename//'/'/.}"'.m4a)\n'
 	else
 		echo -e '\nERROR: : Unable to get codec info\n'
 		exit -1
@@ -50,6 +61,11 @@ function exrefresh()
 {
 	title=$(cat "$opath"/content/"$date"_"$number".content | grep -oP '"home":{"title":{"text":"\K[^"]+')
 	url=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'streamUrl":"\K[^"]+')
+	# TODO 5)
+	if [ $vcheck = 'true' ]
+	then
+		vurl=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'videoStreamUrl":"\K[^"]+')
+	fi
 	startdate=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'start":"20\K[^T]+')
 	starttime=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'start":"\K[^"]+' | grep -oP 'T\K[^.+]+')
 	subject=$(cat "$opath"/content/"$date"_"$number".content | grep -oP '},"title":{"text":"\K[^"]+')
@@ -66,14 +82,14 @@ function timeupdate()
 	stimemin=$(expr substr "${starttime//':'/}" 3 2)
 	hourcheck=$(expr "$stimehr" - "$hour")
 	mincheck=$(expr "$stimemin" - "$min")
-	if [ $mincheck -lt 0 ]
+	if [ $mincheck -le 0 ]
 	then
 		timecheck=$(echo "$hourcheck*60" | bc -l)
-	elif [ $mincheck -ge 0 ]
+	elif [ $mincheck -gt 0 ]
 	then
 		timecheck=$(echo "$hourcheck*60+$mincheck" | bc -l)
 	else
-		echo -e '\ntimecheck(): ERROR\n'
+		echo -e '\ntimeupdate(): ERROR\n'
 	fi
 }
 
@@ -98,7 +114,7 @@ function diffdatesleep()
 		echo 'Min difference: '"$mincheck"
 		echo -e 'Time difference: '"$timecheck"' min\n'
 		counter
-		echo -e 'content 새로 고침 중...\n'
+		echo -e 'content 다시 불러오는 중...\n'
 		wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
 		timeupdate
 		exrefresh
@@ -106,26 +122,26 @@ function diffdatesleep()
 		echo '방송시간: '"${starttime//':'/}"' / 현재: '"$hour$min$sec"
 		echo -e '\n'"$title"' E'"$ep"' '"${subject//'\r\n'/}"'\n'"$url"
 		echo
-		# 시작 시간이 65분 초과 차이
-		if [ $hourcheck -ge 0 ] || [ $timecheck -gt 65 ]
+		# 시작 시간이 65분 이상 차이
+		if [ $hourcheck -ge 0 ] && [ $timecheck -ge 65 ]
 		then
 			timer=3600
-		# 시작 시간이 70분 이하 차이
-		elif [ $hourcheck -ge 0 ] || [ $timecheck -gt 70 ]
+		# 시작 시간이 65분 미만 차이
+		elif [ $hourcheck -ge 0 ] && [ $timecheck -lt 65 ]
 		then
 			# 시작 시간이 10분 초과 차이
-			if [ $hourcheck -ge 0 ] || [ $timecheck -gt 10 ]
+			if [ $hourcheck -ge 0 ] && [ $timecheck -gt 10 ]
 			then
 				timer=600
 			# 시작 시간이 10분 이하 차이
-			elif [ $hourcheck -ge 0 ] || [ $timecheck -le 10 ]
+			elif [ $hourcheck -ge 0 ] && [ $timecheck -le 10 ]
 			then
 				# 시작 시간이 2분 초과 차이
-				if [ $hourcheck -ge 0 ] || [ $timecheck -gt 2 ]
+				if [ $hourcheck -ge 0 ] && [ $timecheck -gt 2 ]
 				then
 					timer=60
 				# 시작 시간이 2분 이하 차이
-				elif [ $hourcheck -ge 0 ] || [ $timecheck -le 2 ]
+				elif [ $hourcheck -ge 0 ] && [ $timecheck -le 2 ]
 				then
 					timer=1
 				else
@@ -144,7 +160,9 @@ function diffdatesleep()
 		if [ "$date" = "${startdate//'-'/}" ]
 		then
 			echo '방송일  : '"${startdate//'-'/}"' / 오늘: '"$date"
+			echo '방송시간: '"${starttime//':'/}"' / 현재: '"$hour$min$sec"
 			echo -e '\ncontent 불러오기 완료'
+			exrefresh
 			break
 		fi
 	done
@@ -153,6 +171,16 @@ function diffdatesleep()
 wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
 exrefresh
 timeupdate
+# TODO 5)
+vcheck=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'video":\K[^,]+')
+
+# TODO 5)
+if [ $vcheck = 'true' ]
+then
+	echo -e '\n비디오 스트림 발견, 함께 다운로드 합니다\n'
+else
+	echo -e '\n비디오 스트림 없음, 오디오만 다운로드 합니다\n'
+fi
 
 echo '방송일  : '"${startdate//'-'/}"' / 오늘: '"$date"
 echo '방송시간: '"${starttime//':'/}"' / 현재: '"$hour$min$sec"
@@ -168,7 +196,6 @@ then
 	if [ "$hour$min$sec" -ge "${starttime//':'/}" ]
 	then
 		echo -e '\n쇼가 시작됨\n'
-		exrefresh
 		getstream
 		echo -e '\nJob Finished, Code: 1\n'
 	# 시작 시간이 안됐을 경우
@@ -190,7 +217,6 @@ then
 				break
 			fi
 		done
-		exrefresh
 		getstream
 		echo -e '\nJob Finished, Code: 2\n'
 	else
@@ -212,7 +238,7 @@ then
 	then
 		# 오전 방송일 경우
 		# TODO 3)
-		#if [ "${starttime//':'/}" -lt 120000 ] || [ "$hour$min$sec" -ge 120000 ]
+		#if [ "${starttime//':'/}" -lt 120000 ] && [ "$hour$min$sec" -ge 120000 ]
 		#then
 		#	echo -e '\n오전 방송입니다\n'
 			#현재 시각에서 00시 까지 남은 시간 계산해서 counter 설정 후 00시 넘길 수 있게
@@ -222,7 +248,6 @@ then
 			#counter
 		#fi
 		echo -e '\n쇼가 시작됨\n'
-		exrefresh
 		getstream
 		echo -e '\nJob Finished, Code: 3\n'
 	# 시작 시간이 안됐을 경우
@@ -231,9 +256,10 @@ then
 		echo -e '\n쇼가 아직 시작되지 않음'
 		while :
 		do
-			time=$(date +'%T')
+			echo '방송시간: '"${starttime//':'/}"' / 현재: '"$hour$min$sec"
 			echo -e '\n대기 중...('"$hour$min$sec"')'
 			sleep 1
+			timeupdate			
 			exrefresh
 			# 시작 시간 확인
 			if [ "$hour$min$sec" -ge "${starttime//':'/}" ]
@@ -243,11 +269,10 @@ then
 				break
 			fi
 		done
-		exrefresh
 		getstream
-		echo -e '\nJob Finished, Code: 4\n'
+		echo -e '\nJob Finished, Code: 2\n'
 	else
-		echo -e '\nERROR: 5\n'
+		echo -e '\nERROR: 4\n'
 		exit -1
 	fi
 else
