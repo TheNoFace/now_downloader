@@ -66,7 +66,15 @@ function timeupdate()
 	stimemin=$(expr substr "${starttime//':'/}" 3 2)
 	hourcheck=$(expr "$stimehr" - "$hour")
 	mincheck=$(expr "$stimemin" - "$min")
-	timecheck=$(echo "$hourcheck*60+$mincheck" | bc -l)
+	if [ $mincheck -lt 0 ]
+	then
+		timecheck=$(echo "$hourcheck*60" | bc -l)
+	elif [ $mincheck -ge 0 ]
+	then
+		timecheck=$(echo "$hourcheck*60+$mincheck" | bc -l)
+	else
+		echo -e '\ntimecheck(): ERROR\n'
+	fi
 }
 
 function counter()
@@ -88,9 +96,9 @@ function diffdatesleep()
 		timeupdate	
 		echo 'Hour difference: '"$hourcheck"
 		echo 'Min difference: '"$mincheck"
-		echo 'Time difference: '"$timecheck"' min'
+		echo -e 'Time difference: '"$timecheck"' min\n'
 		counter
-		echo -e '\ncontent 새로 고침 중...\n'
+		echo -e 'content 새로 고침 중...\n'
 		wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
 		timeupdate
 		exrefresh
@@ -98,8 +106,8 @@ function diffdatesleep()
 		echo '방송시간: '"${starttime//':'/}"' / 현재: '"$hour$min$sec"
 		echo -e '\n'"$title"' E'"$ep"' '"${subject//'\r\n'/}"'\n'"$url"
 		echo
-		# 시작 시간이 70분 초과 차이
-		if [ $hourcheck -ge 0 ] || [ $timecheck -gt 70 ]
+		# 시작 시간이 65분 초과 차이
+		if [ $hourcheck -ge 0 ] || [ $timecheck -gt 65 ]
 		then
 			timer=3600
 		# 시작 시간이 70분 이하 차이
@@ -198,7 +206,7 @@ then
 	exrefresh
 	echo 'Hour difference: '"$hourcheck"
 	echo 'Min difference: '"$mincheck"
-	echo 'Time difference: '"$timecheck"' min'
+	echo -e 'Time difference: '"$timecheck"' min\n'
 	# 시작 시간이 됐을 경우
 	if [ "$hour$min$sec" -ge "${starttime//':'/}" ]
 	then
