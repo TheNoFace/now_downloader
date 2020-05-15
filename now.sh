@@ -99,7 +99,7 @@ function contentget()
 				fi
 			elif [ "$ctlength" -ge 3000 ]
 			then
-				echo -e '\n정상 content 파일\n'
+				echo -e "${GRN}"'\n정상 content 파일\n'"${NC}"
 				wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
 				break
 			else
@@ -110,7 +110,7 @@ function contentget()
 		unset retry
 	elif [ "$ctlength" -ge 3000 ]
 	then
-		echo -e '\n정상 content 파일\n'
+		echo -e "${GRN}"'\n정상 content 파일\n'"${NC}"
 		wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
 	else
 		echo -e "${RED}"'\nERROR: contentget(): ctlength 2\n'"${NC}"
@@ -298,7 +298,7 @@ function diffdatesleep()
 		echo -e 'Time difference: '"$timecheck"' min'
 		counter
 		echo -e 'content 다시 불러오는 중...\n'
-		wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
+		contentget
 		timeupdate
 		exrefresh
 		echo -e '방송일  : '"$startdates"' / 오늘: '"$date"
@@ -350,7 +350,7 @@ function diffdatesleep()
 		then
 			echo '방송일  : '"$startdates"' / 오늘: '"$date"
 			echo '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"
-			echo -e '\ncontent 불러오기 완료\n'
+			echo -e "${GRN}"'\ncontent 불러오기 완료\n'"${NC}"
 			break
 		fi
 	done
@@ -422,7 +422,7 @@ function samedatesleep()
 		then
 			echo '방송일  : '"$startdates"' / 오늘: '"$date"
 			echo '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"
-			echo -e '\ncontent 불러오기 완료'
+			echo -e "${GRN}"'\ncontent 불러오기 완료\n'"${NC}"
 			exrefresh
 			break
 		fi
@@ -462,7 +462,7 @@ then
 	# 시작 시간이 됐을 경우
 	if [ "$hour$min$sec" -ge "$starttimes" ]
 	then
-		echo -e '쇼가 시작됨\n'
+		echo -e "${YLW}"'쇼가 시작됨\n'"${NC}"
 		getstream
 		echo -e "${GRN}"'\nJob Finished, Code: 1\n'"${NC}"
 	# 시작 시간이 안됐을 경우
@@ -480,7 +480,7 @@ then
 			if [ "$hour$min$sec" -ge "$starttimes" ]
 			then
 				echo '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"
-				echo -e '쇼가 시작됨\n'
+				echo -e "${YLW}"'쇼가 시작됨\n'"${NC}"
 				break
 			fi
 		done
@@ -531,7 +531,7 @@ then
 		#fi
 		echo -e "${YLW}"'\n * TEST POINT 1\n'"${NC}"
 		#samedatesleep
-		echo -e '쇼가 시작됨\n'
+		echo -e "${YLW}"'쇼가 시작됨\n'"${NC}"
 		getstream
 		echo -e "${GRN}"'\nJob Finished, Code: 3\n'"${NC}"
 	# 시작 시간이 안됐을 경우
@@ -549,7 +549,7 @@ then
 			if [ "$hour$min$sec" -ge "$starttimes" ]
 			then
 				echo '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"
-				echo -e '\n쇼가 시작됨\n'
+				echo -e "${YLW}"'쇼가 시작됨\n'"${NC}"
 				break
 			fi
 		done
