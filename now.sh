@@ -1,11 +1,16 @@
 #!/bin/bash
 
 # TODO:
-# 200513 해결 | 0) 스크립트 정상 종료 안되는 원인 찾기
-# 200513 임시 | 1) wget로 playlist.m3u8을 받아 올 수 없으면 sleep 후 재시도
-# 2) 스트리밍 중단 시 스크립트 재시작
 # 3) 오전 스트리밍 구분 추가
 # 4) 날이 하루 이상 차이날 경우 12시간 타이머
+
+# 스크립트 시작엔 contentget/exrefresh/timeupdate 순서, 이후 사용시 contentget/timeupdate/exrefresh 사용
+
+# Color template: echo -e "${RED}TITLE${GRN}MESSAGE${NC}"
+RED='\033[0;31m' # Error or force exit
+YLW='\033[1;33m' # Warning or alert
+GRN='\033[0;32m'
+NC='\033[0m' # No Color
 
 if [ "$#" -eq 2 ]
 then
@@ -17,7 +22,7 @@ then
 			echo "Use -f to force download"
 			exit -1
 		else
-			echo -e '\nForce Download Enabled!'
+			echo -e "${YLW}"'\nForce Download Enabled!'"${NC}"
 			echo -e 'ShowID: '"$2"'\n'
 			number="$2"
 		fi
@@ -41,12 +46,81 @@ else
 	number="$1"
 fi
 
+echo -n "Maximum download retry (Default: 10): "
+read maxretry
+if [ -z "$maxretry" ]
+then
+	maxretry=10
+	echo -e "${YLW}"'Maximum retry set to default ('"$maxretry"')'"${NC}"
+else
+	echo -e "${YLW}"'Maximum retry set to '"$maxretry""${NC}"
+fi
+echo -ne "\nFailcheck streaming threshold (Default: 3300s): "
+read ptimeth
+if [ -z "$ptimeth" ]
+then
+	ptimeth=3300
+	echo -e "${YLW}"'Failcheck threshold set to default ('"$ptimeth"')'"${NC}"
+else
+	echo -e "${YLW}"'Failcheck threshold set to '"$ptimeth""${NC}"
+fi
+echo
+
 opath=/srv/mount/ssd0/now
 date=$(date +'%y%m%d')
 
+function contentget()
+{
+	ctlength=$(curl --head https://now.naver.com/api/nnow/v1/stream/$number/content | grep -oP 'content-length: \K[0-9]*')
+	echo -e '\ncontent_length: '"$ctlength"
+	if [ "$ctlength" -lt 3000 ]
+	then
+		retry=0
+		while :
+		do
+			echo -e "${YLW}"'\ncontent 파일이 올바르지 않음, 1초 후 재시도'"${NC}"
+			: $((retry++))
+			timer=1
+			counter
+			echo -e '\n재시도 횟수: '"$retry"' / 최대 재시도 횟수: '"$maxretry"'\n'
+			ctlength=$(curl --head https://now.naver.com/api/nnow/v1/stream/$number/content | grep -oP 'content-length: \K[0-9]*')
+			if [ "$ctlength" -lt 3000 ]
+			then
+				if [ "$retry" -lt "$maxretry" ]
+				then
+					echo -e "${YLW}"'\n다운로드 실패, 3초 후 재시도'"${NC}"
+				elif [ "$retry" -ge "$maxretry" ]
+				then
+					echo -e "${RED}"'\n다운로드 실패\n최대 재시도 횟수 초과, 스크립트 종료\n'"${NC}"
+					exit -1
+				else
+					echo -e "${RED}"'\nERROR: contentget(): maxretry\n'"${NC}"
+					exit -1
+				fi
+			elif [ "$ctlength" -ge 3000 ]
+			then
+				echo -e '\n정상 content 파일\n'
+				wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
+				break
+			else
+				echo -e "${RED}"'\nERROR: contentget(): ctlength 1\n'"${NC}"
+				exit -1
+			fi
+		done
+		unset retry
+	elif [ "$ctlength" -ge 3000 ]
+	then
+		echo -e '\n정상 content 파일\n'
+		wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
+	else
+		echo -e "${RED}"'\nERROR: contentget(): ctlength 2\n'"${NC}"
+		exit -1
+	fi
+}
+
 function getstream()
 {
-	wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
+	contentget
 	timeupdate
 	exrefresh
 	echo '방송시간: '"$starttime"' / 현재: '"$hour"':'"$min"':'"$sec"
@@ -55,14 +129,11 @@ function getstream()
 		echo -e '\n'"$title"' E'"$ep"' '"$subjects"
 		echo -e 'Audio: '"$url"'\nVideo: '"$vurl"'\n'
 		echo -e '오디오 파일: '"$filenames"'.ts\n비디오 파일: '"$filenames"'_video.ts\n'
-		# TODO 2)
-		# countup 말고 ffprobe로 다운로드 된 파일 길이 구하기
-		#countup &
 		youtube-dl "$url" --output "$opath"/show/"$title"/"$filenames".ts &
 		youtube-dl "$vurl" --output "$opath"/show/"$title"/"$filenames"_video.ts
 		if [ "$?" =  '1' ]
 		then
-			echo -e '\n다운로드 실패, 1초 후 재시도'
+			echo -e "${YLW}"'\n다운로드 실패, 1초 후 재시도'"${NC}"
 			retry=0
 			while :
 			do
@@ -71,89 +142,89 @@ function getstream()
 				: $((retry++))
 				echo -e '\n재시도 횟수: '"$retry"'\n'
 				wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
+				timeupdate
 				exrefresh
-				# TODO 2)
-				#slength=0
 				youtube-dl "$url" --output "$opath"/show/"$title"/"$filenames".ts &
 				youtube-dl "$vurl" --output "$opath"/show/"$title"/"$filenames"_video.ts
 				if [ "$?" =  '1' ]
 				then
-					echo -e '\n다운로드 실패, 3초 후 재시도'
-					#echo -e '\nslength: '"$slength"
+					if [ "$retry" -lt "$maxretry" ]
+					then
+						echo -e "${YLW}"'\n다운로드 실패, 1초 후 재시도'"${NC}"
+					elif [ "$retry" -ge "$maxretry" ]
+					then
+						echo -e "${RED}"'\n다운로드 실패\n최대 재시도 횟수 초과, 스크립트 종료\n'"${NC}"
+						exit -1
+					else
+						echo -e "${RED}"'\nERROR: getstream(): maxretry 1\n'"${NC}"
+						exit -1
+					fi
 				else
-					echo -e '\n다운로드 성공'
+					echo -e "${GRN}"'\n다운로드 성공'"${NC}"
 					echo -e '\n총 재시도 횟수: '"$retry"
-					#echo -e '\nslength: '"$slength"
+					unset retry
 					break
 				fi
 			done
 		fi
-		# TODO 2)
-		# 총 스트리밍길이가 1시간 미만일 경우
-		#if [ "$slength" -lt 3600 ] && [ -z "$sfailcheck" ]
-		#then
-		#	while [ "$sfailcheck" -le 10 ]
-		#	do
-		#		sfailcheck=0
-		#		: $((sfailcheck++))
-		#		echo -e '\n방송이 정상 종료되지 않음, 5초 대기'
-		#		timer=5
-		#		counter
-		#	done
-		#fi
-		echo -e '\n다운로드 완료, 3초 대기'
-		#echo -e '\nslength: '"$slength"
+		echo -e "${GRN}"'\n다운로드 완료, 3초 대기'"${NC}"
 		timer=3
 		counter
 	else
 		echo -e '\n'"$title"' E'"$ep"' '"$subjects"'\n'"$url"'\n\n파일 이름: '"$filenames"'.ts\n'
-		# TODO 2)
-		#countup &
 		youtube-dl "$url" --output "$opath"/show/"$title"/"$filenames".ts
 		if [ "$?" =  '1' ]
 		then
-			echo -e '\n다운로드 실패, 1초 후 재시도'
+			echo -e "${YLW}"'\n다운로드 실패, 1초 후 재시도'"${NC}"
 			retry=0
 			while :
 			do
 				timer=1
 				counter
 				: $((retry++))
-				echo -e '\n재시도 횟수: '"$retry"'\n'
+				echo -e '\n재시도 횟수: '"$retry"' / 최대 재시도 횟수: '"$maxretry"'\n'
 				wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
+				timeupdate
 				exrefresh
-				# TODO 2)
-				#slength=0
 				youtube-dl "$url" --output "$opath"/show/"$title"/"$filenames".ts
 				if [ "$?" =  '1' ]
 				then
-					echo -e '\n다운로드 실패, 3초 후 재시도'
-					#echo -e '\nslength: '"$slength"
+					if [ "$retry" -lt "$maxretry" ]
+					then
+						echo -e "${YLW}"'\n다운로드 실패, 1초 후 재시도'"${NC}"
+					elif [ "$retry" -ge "$maxretry" ]
+					then
+						echo -e "${RED}"'\n다운로드 실패\n최대 재시도 횟수 초과, 스크립트 종료\n'"${NC}"
+						exit -1
+					else
+						echo -e "${RED}"'\nERROR: getstream(): maxretry 2\n'"${NC}"
+						exit -1
+					fi
 				else
-					echo -e '\n다운로드 성공'
+					echo -e "${GRN}"'\n다운로드 성공'"${NC}"
 					echo -e '\n총 재시도 횟수: '"$retry"
-					#echo -e '\nslength: '"$slength"
+					unset retry
 					break
 				fi
 			done
 		fi
-		# TODO 2)
-		# 총 스트리밍길이가 1시간 미만일 경우
-		#if [ "$slength" -lt 3600 ] && [ -z "$sfailcheck" ]
-		#then
-		#	while [ "$sfailcheck" -le 10 ]
-		#	do
-		#		sfailcheck=0
-		#		: $((sfailcheck++))
-		#		echo -e '\n방송이 정상 종료되지 않음, 5초 대기'
-		#		timer=5
-		#		counter
-		#	done
-		#fi
-		echo -e '\n다운로드 완료, 3초 대기'
-		#echo -e '\nslength: '"$slength"
+		echo -e "${GRN}"'\n다운로드 완료, 3초 대기'"${NC}"
 		timer=3
 		counter
+	fi
+	# TODO 2)
+	# 총 스트리밍길이가 $ptimeth 이하일 경우 10초 대기 후 재시작
+	ptime=$(ffprobe -v error -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "$opath"/show/"$title"/"$filenames".ts | grep -o '^[^.]*')
+	if [ "$ptime" -lt "$ptimeth" ] && [ -z "$sfailcheck" ]
+	then
+		echo -e "${RED}"'\n스트리밍 시간: '"$ptime"'s / 스트리밍 정상 종료 기준: '"$ptimeth"'s'
+		echo -e '스트리밍이 정상 종료되지 않음, 15초 후 재시작'"${NC}"
+		sfailcheck=1
+		timer=15
+		counter
+		getstream
+	else
+		echo -e "${GRN}"'스트리밍이 정상 종료됨'"${NC}"
 	fi
 	codec=$(ffprobe -v error -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$opath"/show/"$title"/"$filenames".ts)
 	if [ "$codec" = 'mp3' ]
@@ -167,7 +238,7 @@ function getstream()
 		ffmpeg -i "$opath"/show/"$title"/"$filenames".ts -vn -c:a copy "$opath"/show/"$title"/"$filenames".m4a
 		echo -e '\nConvert Complete: '"$filenames"'.m4a'
 	else
-		echo -e '\nERROR: : Unable to get codec info\n'
+		echo -e "${RED}"'\nERROR: : Unable to get codec info\n'"${NC}"
 		exit -1
 	fi
 }
@@ -190,7 +261,7 @@ function exrefresh()
 	subjects=${subject//'\r\n'/}
 	startdates=${startdate//'-'/}
 	starttimes=${starttime//':'/}
-	echo -e 'Exports refreshed\n'
+	echo -e "${YLW}"'Exports refreshed\n'"${NC}"
 }
 
 function timeupdate()
@@ -203,7 +274,7 @@ function timeupdate()
 	hourcheck=$(expr "$stimehr" - "$hour")
 	mincheck=$(expr "$stimemin" - "$min")
 	timecheck=$(echo "(($stimehr*60)+$stimemin)-(($hour*60)+$min)" | bc -l)
-	echo -e 'Time refreshed\n'
+	echo -e "${YLW}"'Time refreshed\n'"${NC}"
 }
 
 function counter()
@@ -216,21 +287,6 @@ function counter()
 		: $((timer--))
 	done
 	echo
-}
-
-# TODO 2)
-function countup()
-{
-	echo -e 'countup initiated\n'
-	slength=0
-	while  [ "$slength" -lt 600 ]
-	do
-		: $((slength++))
-		sleep 1
-		#echo -ne 'slength: '"$slength\033[0K"'s'"\r"
-	done
-	echo -e '\nslength has reached '"$slength"'. terminating.'
-	#unset slength
 }
 
 function diffdatesleep()
@@ -278,15 +334,15 @@ function diffdatesleep()
 				then
 					timer=1
 				else
-					echo -e '\nERROR: 1\n'
+					echo -e "${RED}"'\nERROR: diffdatesleep(): 1\n'"${NC}"
 					exit -1
 				fi
 			else
-				echo -e '\nERROR: 2\n'
+				echo -e "${RED}"'\nERROR: diffdatesleep(): 2\n'"${NC}"
 				exit -1
 			fi
 		else
-			echo -e '\nERROR: 3\n'
+			echo -e "${RED}"'\nERROR: diffdatesleep(): 3\n'"${NC}"
 			exit -1
 		fi
 		# 시작일 확인
@@ -349,16 +405,16 @@ function samedatesleep()
 					then
 						timer=1
 					else
-						echo -e '\nERROR: 1-1n'
+						echo -e "${RED}"'\nERROR: samedatesleep(): 1\n'"${NC}"
 						exit -1
 					fi
 				else
-					echo -e '\nERROR: 2-1\n'
+					echo -e "${RED}"'\nERROR: samedatesleep(): 2\n'"${NC}"
 					exit -1
 				fi
 			fi
 		else
-			echo -e '\nERROR: 3-1\n'
+			echo -e "${RED}"'\nERROR: samedatesleep(): 3\n'"${NC}"
 			exit -1
 		fi
 		# 시작일 확인
@@ -380,9 +436,9 @@ timeupdate
 
 if [ "$vcheck" = 'true' ]
 then
-	echo -e '비디오 스트림 발견, 함께 다운로드 합니다\n'
+	echo -e "${YLW}"'비디오 스트림 발견, 함께 다운로드 합니다\n'"${NC}"
 else
-	echo -e '비디오 스트림 없음, 오디오만 다운로드 합니다\n'
+	echo -e "${YLW}"'비디오 스트림 없음, 오디오만 다운로드 합니다\n'"${NC}"
 fi
 
 echo '방송일  : '"$startdates"' / 오늘: '"$date"
@@ -390,9 +446,9 @@ echo -e '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"'\n'
 
 if [ "$1" = "-f" ] && [ -n "$2" ]
 then
-	echo -e '\nForce Download Enabled!\n'
+	echo -e "${YLW}"'Force Download Enabled!\n'"${NC}"
 	getstream
-	echo -e '\nJob Finished, Code: -f\n'
+	echo -e "${GRN}"'\nJob Finished, Code: -f\n'"${NC}"
 	exit 0
 fi
 
@@ -408,7 +464,7 @@ then
 	then
 		echo -e '쇼가 시작됨\n'
 		getstream
-		echo -e '\nJob Finished, Code: 1\n'
+		echo -e "${GRN}"'\nJob Finished, Code: 1\n'"${NC}"
 	# 시작 시간이 안됐을 경우
 	elif [ "$hour$min$sec" -lt "$starttimes" ]
 	then
@@ -429,9 +485,9 @@ then
 			fi
 		done
 		getstream
-		echo -e '\nJob Finished, Code: 2\n'
+		echo -e "${GRN}"'\nJob Finished, Code: 2\n'"${NC}"
 	else
-		echo -e '\nERROR: 4\n'
+		echo -e "${RED}"'\nERROR: 1\n'"${NC}"
 		exit -1
 	fi
 # 시작일이 같을 경우
@@ -473,11 +529,11 @@ then
 		#		fi
 		#	fi
 		#fi
-		echo -e '\n * TEST POINT 1\n'
+		echo -e "${YLW}"'\n * TEST POINT 1\n'"${NC}"
 		#samedatesleep
 		echo -e '쇼가 시작됨\n'
 		getstream
-		echo -e '\nJob Finished, Code: 3\n'
+		echo -e "${GRN}"'\nJob Finished, Code: 3\n'"${NC}"
 	# 시작 시간이 안됐을 경우
 	elif [ "$hour$min$sec" -lt "$starttimes" ]
 	then
@@ -497,14 +553,14 @@ then
 				break
 			fi
 		done
-		echo -e '\n * TEST POINT 2\n'
+		echo -e "${YLW}"'\n * TEST POINT 2\n'"${NC}"
 		getstream
-		echo -e '\nJob Finished, Code: 4\n'
+		echo -e "${GRN}"'\nJob Finished, Code: 4\n'"${NC}"
 	else
-		echo -e '\nERROR: 5\n'
+		echo -e "${RED}"'\nERROR: 2\n'"${NC}"
 		exit -1
 	fi
 else
-	echo -e '\nERROR: 6\n'
+	echo -e "${RED}"'\nERROR: 3\n'"${NC}"
 	exit -1
 fi
