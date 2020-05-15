@@ -213,19 +213,36 @@ function getstream()
 		counter
 	fi
 	# TODO 2)
-	# 총 스트리밍길이가 $ptimeth 이하일 경우 10초 대기 후 재시작
+	# 총 스트리밍길이가 $ptimeth 이하일 경우 15초 대기 후 재시작
 	ptime=$(ffprobe -v error -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "$opath"/show/"$title"/"$filenames".ts | grep -o '^[^.]*')
-	if [ "$ptime" -lt "$ptimeth" ] && [ -z "$sfailcheck" ]
+	echo -e '\n스트리밍 시간: '"$ptime"'s / 스트리밍 정상 종료 기준: '"$ptimeth"'s'
+	if [ "$ptime" -lt "$ptimeth" ]
 	then
-		echo -e "${RED}"'\n스트리밍 시간: '"$ptime"'s / 스트리밍 정상 종료 기준: '"$ptimeth"'s'
-		echo -e '스트리밍이 정상 종료되지 않음, 15초 후 재시작'"${NC}"
-		sfailcheck=1
-		timer=15
-		counter
-		getstream
+		if [ -z "$sfailcheck" ]
+		then
+			echo -e "${RED}"'\n스트리밍이 정상 종료되지 않음, 15초 후 재시작'"${NC}"
+			sfailcheck=1
+			timer=15
+			counter
+			getstream
+		elif [ -n "$sfailcheck" ]
+		then
+			echo -e "${GRN}"'\n스트리밍이 정상 종료됨'"${NC}"
+			convert
+		else
+			echo -e "${RED}"'\nERROR: sfailcheck\n'"${NC}"
+		fi
+	elif [ "$ptime" -ge "$ptimeth" ]
+	then
+		echo -e "${GRN}"'\n스트리밍이 정상 종료됨'"${NC}"
+		convert
 	else
-		echo -e "${GRN}"'스트리밍이 정상 종료됨'"${NC}"
+		echo -e "${RED}"'\nERROR: ptime/ptimeth\n'"${NC}"
 	fi
+}
+
+function convert()
+{
 	codec=$(ffprobe -v error -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$opath"/show/"$title"/"$filenames".ts)
 	if [ "$codec" = 'mp3' ]
 	then 
@@ -474,7 +491,7 @@ then
 			echo '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"
 			echo -e '\n대기 중...('"$hour$min$sec"')'
 			sleep 1
-			timeupdate			
+			timeupdate
 			exrefresh
 			# 시작 시간 확인
 			if [ "$hour$min$sec" -ge "$starttimes" ]
@@ -517,7 +534,7 @@ then
 		#			do
 		#				timer=300
 		#				counter
-		#				timeupdate			
+		#				timeupdate
 		#				exrefresh
 		#				# 시작 시간 확인
 		#				if [ "$hourcheck" -ge 0 ]
@@ -543,7 +560,7 @@ then
 			echo '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"
 			echo -e '\n대기 중...('"$hour$min$sec"')'
 			sleep 1
-			timeupdate			
+			timeupdate
 			exrefresh
 			# 시작 시간 확인
 			if [ "$hour$min$sec" -ge "$starttimes" ]
