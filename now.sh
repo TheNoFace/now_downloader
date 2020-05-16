@@ -3,6 +3,7 @@
 # TODO:
 # 3) 오전 스트리밍 구분 추가
 # 4) 날이 하루 이상 차이날 경우 12시간 타이머
+# 5) diffdatesleep()와 samedatesleep() 합치기
 
 # 스크립트 시작엔 contentget/exrefresh/timeupdate 순서, 이후 사용시 contentget/timeupdate/exrefresh 사용
 
@@ -11,6 +12,9 @@ RED='\033[0;31m' # Error or force exit
 YLW='\033[1;33m' # Warning or alert
 GRN='\033[0;32m'
 NC='\033[0m' # No Color
+
+# directory to save; USE ORIGINAL LINK, NOT SYMLINKS
+opath=/srv/mount/ssd0/now
 
 if [ "$#" -eq 2 ]
 then
@@ -66,14 +70,11 @@ else
 fi
 echo
 
-opath=/srv/mount/ssd0/now
-date=$(date +'%y%m%d')
-
 function contentget()
 {
 	ctlength=$(curl --head https://now.naver.com/api/nnow/v1/stream/$number/content | grep -oP 'content-length: \K[0-9]*')
 	echo -e '\ncontent_length: '"$ctlength"
-	if [ "$ctlength" -lt 3000 ]
+	if [ "$ctlength" -lt 2000 ]
 	then
 		retry=0
 		while :
@@ -84,7 +85,7 @@ function contentget()
 			counter
 			echo -e '\n재시도 횟수: '"$retry"' / 최대 재시도 횟수: '"$maxretry"'\n'
 			ctlength=$(curl --head https://now.naver.com/api/nnow/v1/stream/$number/content | grep -oP 'content-length: \K[0-9]*')
-			if [ "$ctlength" -lt 3000 ]
+			if [ "$ctlength" -lt 2000 ]
 			then
 				if [ "$retry" -lt "$maxretry" ]
 				then
@@ -97,7 +98,7 @@ function contentget()
 					echo -e "${RED}"'\nERROR: contentget(): maxretry\n'"${NC}"
 					exit -1
 				fi
-			elif [ "$ctlength" -ge 3000 ]
+			elif [ "$ctlength" -ge 2000 ]
 			then
 				echo -e "${GRN}"'\n정상 content 파일\n'"${NC}"
 				wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
@@ -108,7 +109,7 @@ function contentget()
 			fi
 		done
 		unset retry
-	elif [ "$ctlength" -ge 3000 ]
+	elif [ "$ctlength" -ge 2000 ]
 	then
 		echo -e "${GRN}"'\n정상 content 파일\n'"${NC}"
 		wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
@@ -283,6 +284,7 @@ function exrefresh()
 
 function timeupdate()
 {
+    date=$(date +'%y%m%d')
 	hour=$(date +'%H')
 	min=$(date +'%M')
 	sec=$(date +'%S')
@@ -446,6 +448,30 @@ function samedatesleep()
 	done
 }
 
+# Start of script
+if [ ! -d "$opath"/content ]
+then
+    echo -e "${YLW}"'content folder does not exitst, creating...\n'"${NC}"
+    mkdir "$opath"/content
+else
+    echo -e 'content folder exists\n'
+fi
+if [ ! -d "$opath"/log ]
+then
+    echo -e "${YLW}"'log folder does not exitst, creating...\n'"${NC}"
+    mkdir "$opath"/log
+else
+    echo -e 'log folder exists\n'
+fi
+if [ ! -d "$opath"/show ]
+then
+    echo -e "${YLW}"'show folder does not exitst, creating...\n'"${NC}"
+    mkdir "$opath"/show
+else
+    echo -e 'show folder exists\n'
+fi
+
+date=$(date +'%y%m%d')
 wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
 vcheck=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'video":\K[^,]+')
 exrefresh
