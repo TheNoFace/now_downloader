@@ -2,7 +2,7 @@
 
 # TODO:
 # 3) 오전 스트리밍 구분 추가
-# 4) 날이 하루 이상 차이날 경우 12시간 타이머
+# 4) 날이 하루 이상 차이날 경우 12시간 타이머 -> 시작일자 입력해서 하루 이상 차이나면 12시간 타이머
 # 5) diffdatesleep()와 samedatesleep() 합치기
 
 # 스크립트 시작엔 contentget/exrefresh/timeupdate 순서, 이후 사용시 contentget/timeupdate/exrefresh 사용
@@ -15,6 +15,7 @@ NC='\033[0m' # No Color
 
 # directory to save; USE ORIGINAL LINK, NOT SYMLINKS
 opath=/srv/mount/ssd0/now
+today=$(date +'%Y-%m-%d')
 
 if [ "$#" -eq 2 ]
 then
@@ -67,6 +68,23 @@ then
 	echo -e "${YLW}"'Failcheck threshold set to default ('"$ptimeth"')'"${NC}"
 else
 	echo -e "${YLW}"'Failcheck threshold set to '"$ptimeth""${NC}"
+fi
+# TODO 4)
+echo -ne "\nCustom start date (Today: $today / Skip if you don't want): "
+read cusdate
+if [ -z "$cusdate" ]
+then
+	echo -e "${YLW}Custom start date is not set${NC}"
+else
+	echo -e "${YLW}Custom start date set to $cusdate${NC}"
+fi
+echo -ne "\nCustom sleep timer before starting script (in seconds / Skip if you don't want): "
+read custimer
+if [ -z "$custimer" ]
+then
+	echo -e "${YLW}Custom sleep timer is not set${NC}"
+else
+	echo -e "${YLW}Custom sleep timer set to $custimer${NC}"
 fi
 echo
 
@@ -134,8 +152,13 @@ function getstream()
 		youtube-dl "$vurl" --output "$opath"/show/"$title"/"$filenames"_video.ts
 		if [ "$?" =  '1' ]
 		then
-			echo -e "${YLW}"'\n다운로드 실패, 1초 후 재시도'"${NC}"
+			if [ "$maxretry" = 0 ]
+			then
+				echo -e "${RED}"'\n다운로드 실패, 스크립트 종료\n'"${NC}"
+				exit -1
+			fi
 			retry=0
+			echo -e "${YLW}"'\n다운로드 실패, 1초 후 재시도'"${NC}"
 			while :
 			do
 				timer=1
@@ -176,8 +199,13 @@ function getstream()
 		youtube-dl "$url" --output "$opath"/show/"$title"/"$filenames".ts
 		if [ "$?" =  '1' ]
 		then
-			echo -e "${YLW}"'\n다운로드 실패, 1초 후 재시도'"${NC}"
+			if [ "$maxretry" = 0 ]
+			then
+				echo -e "${RED}"'\n다운로드 실패, 스크립트 종료\n'"${NC}"
+				exit -1
+			fi
 			retry=0
+			echo -e "${YLW}"'\n다운로드 실패, 1초 후 재시도'"${NC}"
 			while :
 			do
 				timer=1
@@ -213,8 +241,6 @@ function getstream()
 		timer=3
 		counter
 	fi
-	# TODO 2)
-	# 총 스트리밍길이가 $ptimeth 이하일 경우 15초 대기 후 재시작
 	ptime=$(ffprobe -v error -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "$opath"/show/"$title"/"$filenames".ts | grep -o '^[^.]*')
 	echo -e '\n스트리밍 시간: '"$ptime"'s / 스트리밍 정상 종료 기준: '"$ptimeth"'s'
 	if [ "$ptime" -lt "$ptimeth" ]
@@ -232,6 +258,7 @@ function getstream()
 			convert
 		else
 			echo -e "${RED}"'\nERROR: sfailcheck\n'"${NC}"
+			exit -1
 		fi
 	elif [ "$ptime" -ge "$ptimeth" ]
 	then
@@ -239,6 +266,7 @@ function getstream()
 		convert
 	else
 		echo -e "${RED}"'\nERROR: ptime/ptimeth\n'"${NC}"
+		exit -1
 	fi
 }
 
@@ -284,28 +312,29 @@ function exrefresh()
 
 function timeupdate()
 {
-    date=$(date +'%y%m%d')
+	date=$(date +'%y%m%d')
 	hour=$(date +'%H')
 	min=$(date +'%M')
 	sec=$(date +'%S')
 	stimehr=$(expr substr "$starttimes" 1 2)
 	stimemin=$(expr substr "$starttimes" 3 2)
-	hourcheck=$(expr "$stimehr" - "$hour")
-	mincheck=$(expr "$stimemin" - "$min")
-	timecheck=$(echo "(($stimehr*60)+$stimemin)-(($hour*60)+$min)" | bc -l)
+	#hourcheck=$(expr "$stimehr" - "$hour")
+	#mincheck=$(expr "$stimemin" - "$min")
+	timecheck=$(echo "($stimehr*60+$stimemin)-($hour*60+$min)" | bc -l)
 	echo -e "${YLW}"'Time refreshed\n'"${NC}"
 }
 
 function counter()
 {
-	echo
+	echo -e '\n총 '"$timer"'초 동안 대기합니다'
 	while [ "$timer" -gt 0 ]
 	do
-		echo -ne 'sleeping for '"$timer\033[0K"'s'"\r"
+		echo -ne "$timer\033[0K"'초 남음'"\r"
 		sleep 1
 		: $((timer--))
 	done
-	echo
+	unset timer
+	echo -e '\n'
 }
 
 function diffdatesleep()
@@ -330,6 +359,42 @@ function diffdatesleep()
 			echo -e '\n'"$title"' E'"$ep"' '"$subjects"'\n'"$url"
 		fi
 		echo
+		# TODO 4)
+		if [ -n "$cusdate" ]
+		then
+			while :
+			do
+				todate=$(date +'%d')
+				datediff=$(expr "$cusdate" - "$todate")
+				echo -e '사용자 설정 방송 일자 차이: '"$datediff"
+				if [ "$datediff" -gt 1 ]
+				then
+					echo -e "${YLW}\n방송일($cusdate일)이 하루 이상 남았습니다\n24시간 동안 대기합니다${NC}"
+					timer=86400
+					counter
+				elif [ "$datediff" -le 1 ]
+				then
+					echo -e "${YLW}\n방송일이 하루 이하 남았습니다${NC}"
+					break
+				else
+					echo -e "${RED}\nERROR: diffdatesleep(): cusdate,stdate,datediff 1 \n${NC}"
+					exit -1
+				fi
+			done
+		elif [ -z "$cusdate" ]
+		then
+			echo -e "${YLW}설정된 방송일이 없습니다\n${NC}"
+		else
+			echo -e "${RED}\nERROR: diffdatesleep(): cusdate,stdate,datediff 1 \n${NC}"
+			exit -1
+		fi
+		# TODO 4)
+		#if [ "$stimehr" -lt 12 ] && [ "$hour" -gt 12] # 시작 시간이 오전, 현재 시간이 오후일 경우
+		#then
+		#	breakhr=$(echo "($stimehr+24-$hour-1)*60*60 | bc -l)
+		#	timer=$breakhr
+		#	counter
+		#if [ $(expr $stimehr + 24 - $hour) -gt 1 ] # 시작 시간과 현재 시간이 1시간 이상 차이
 		# 시작 시간이 65분 이상 차이
 		if [ "$timecheck" -ge 65 ]
 		then
@@ -384,7 +449,7 @@ function samedatesleep()
 		echo -e 'Time difference: '"$timecheck"' min'
 		counter
 		echo -e 'content 다시 불러오는 중...\n'
-		wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
+		contentget
 		timeupdate
 		exrefresh
 		echo -e '방송일  : '"$startdates"' / 오늘: '"$date"
@@ -397,43 +462,74 @@ function samedatesleep()
 			echo -e '\n'"$title"' E'"$ep"' '"$subjects"'\n'"$url"
 		fi
 		echo
-		# 시작시간과 현재시간의 차이가 음수일 경우 (시작시간보다 현재시간이 클 경우)
-		if [ "$timecheck" -lt 0 ]
+		# TODO 4)
+		if [ -n "$cusdate" ]
 		then
-			timer=0
-			# 시작 시간이 65분 이상 차이
-			if [ "$timecheck" -ge 65 ]
-			then
-				timer=3600
-			# 시작 시간이 65분 미만 차이
-			elif [ "$timecheck" -lt 65 ]
-			then
-				# 시작 시간이 10분 초과 차이
-				if [ "$timecheck" -gt 10 ]
+			while :
+			do
+				todate=$(date +'%d')
+				datediff=$(expr "$cusdate" - "$todate")
+				echo -e '사용자 설정 방송 일자 차이: '"$datediff"
+				if [ "$datediff" -gt 1 ]
 				then
-					timer=600
-				# 시작 시간이 10분 이하 차이
-				elif [ "$timecheck" -le 10 ]
+					echo -e "${YLW}\n방송일($cusdate일)이 하루 이상 남았습니다\n24시간 동안 대기합니다${NC}"
+					timer=86400
+					counter
+				elif [ "$datediff" -le 1 ]
 				then
-					# 시작 시간이 2분 초과 차이
-					if [ "$timecheck" -gt 2 ]
-					then
-						timer=60
-					# 시작 시간이 2분 이하 차이
-					elif [ "$timecheck" -le 2 ]
-					then
-						timer=1
-					else
-						echo -e "${RED}"'\nERROR: samedatesleep(): 1\n'"${NC}"
-						exit -1
-					fi
+					echo -e "${YLW}\n방송일이 하루 이하 남았습니다${NC}"
+					break
 				else
-					echo -e "${RED}"'\nERROR: samedatesleep(): 2\n'"${NC}"
+					echo -e "${RED}\nERROR: diffdatesleep(): cusdate,stdate,datediff 1 \n${NC}"
 					exit -1
 				fi
+			done
+		elif [ -z "$cusdate" ]
+		then
+			echo -e "${YLW}설정된 방송일이 없습니다\n${NC}"
+		else
+			echo -e "${RED}\nERROR: diffdatesleep(): cusdate,stdate,datediff 1 \n${NC}"
+			exit -1
+		fi
+		# TODO 4)
+		#if [ "$stimehr" -lt 12 ] && [ "$hour" -gt 12] # 시작 시간이 오전, 현재 시간이 오후일 경우
+		#then
+		#	breakhr=$(echo "($stimehr+24-$hour-1)*60*60 | bc -l)
+		#	timer=$breakhr
+		#	counter
+		#if [ $(expr $stimehr + 24 - $hour) -gt 1 ] # 시작 시간과 현재 시간이 1시간 이상 차이
+		# 시작 시간이 65분 이상 차이
+		if [ "$timecheck" -ge 65 ]
+		then
+			timer=3600
+		# 시작 시간이 65분 미만 차이
+		elif [ "$timecheck" -lt 65 ]
+		then
+			# 시작 시간이 10분 초과 차이
+			if [ "$timecheck" -gt 10 ]
+			then
+				timer=600
+			# 시작 시간이 10분 이하 차이
+			elif [ "$timecheck" -le 10 ]
+			then
+				# 시작 시간이 2분 초과 차이
+				if [ "$timecheck" -gt 2 ]
+				then
+					timer=60
+				# 시작 시간이 2분 이하 차이
+				elif [ "$timecheck" -le 2 ]
+				then
+					timer=1
+				else
+					echo -e "${RED}"'\nERROR: diffdatesleep(): 1\n'"${NC}"
+					exit -1
+				fi
+			else
+				echo -e "${RED}"'\nERROR: diffdatesleep(): 2\n'"${NC}"
+				exit -1
 			fi
 		else
-			echo -e "${RED}"'\nERROR: samedatesleep(): 3\n'"${NC}"
+			echo -e "${RED}"'\nERROR: diffdatesleep(): 3\n'"${NC}"
 			exit -1
 		fi
 		# 시작일 확인
@@ -442,7 +538,6 @@ function samedatesleep()
 			echo '방송일  : '"$startdates"' / 오늘: '"$date"
 			echo '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"
 			echo -e "${GRN}"'\ncontent 불러오기 완료\n'"${NC}"
-			exrefresh
 			break
 		fi
 	done
@@ -451,24 +546,24 @@ function samedatesleep()
 # Start of script
 if [ ! -d "$opath"/content ]
 then
-    echo -e "${YLW}"'content folder does not exitst, creating...\n'"${NC}"
-    mkdir "$opath"/content
+	echo -e "${YLW}content folder does not exitst, creating...\n${NC}"
+	mkdir "$opath"/content
 else
-    echo -e 'content folder exists\n'
+	echo -e 'content folder exists\n'
 fi
 if [ ! -d "$opath"/log ]
 then
-    echo -e "${YLW}"'log folder does not exitst, creating...\n'"${NC}"
-    mkdir "$opath"/log
+	echo -e "${YLW}log folder does not exitst, creating...\n${NC}"
+	mkdir "$opath"/log
 else
-    echo -e 'log folder exists\n'
+	echo -e 'log folder exists\n'
 fi
 if [ ! -d "$opath"/show ]
 then
-    echo -e "${YLW}"'show folder does not exitst, creating...\n'"${NC}"
-    mkdir "$opath"/show
+	echo -e "${YLW}show folder does not exitst, creating...\n${NC}"
+	mkdir "$opath"/show
 else
-    echo -e 'show folder exists\n'
+	echo -e 'show folder exists\n'
 fi
 
 date=$(date +'%y%m%d')
@@ -487,6 +582,20 @@ fi
 echo '방송일  : '"$startdates"' / 오늘: '"$date"
 echo -e '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"'\n'
 
+if [ -n "$custimer" ]
+then
+	echo -e "${YLW}사용자가 설정한 시작 대기 타이머가 존재합니다 ($custimer초)${NC}"
+	timer=$custimer
+	counter
+	unset timer
+elif [ -z "$custimer" ]
+then
+	echo -e "사용자가 설정한 시작 대기 타이머가 없음\n"
+else
+	echo -e "${RED}\nERROR: custimer\n${NC}"
+	exit -1
+fi
+
 if [ "$1" = "-f" ] && [ -n "$2" ]
 then
 	echo -e "${YLW}"'Force Download Enabled!\n'"${NC}"
@@ -501,13 +610,13 @@ then
 	timer=0
 	diffdatesleep
 	timeupdate
-	# TODO 4)
 	# 시작 시간이 됐을 경우
 	if [ "$hour$min$sec" -ge "$starttimes" ]
 	then
 		echo -e "${YLW}"'쇼가 시작됨\n'"${NC}"
 		getstream
 		echo -e "${GRN}"'\nJob Finished, Code: 1\n'"${NC}"
+		exit 0
 	# 시작 시간이 안됐을 경우
 	elif [ "$hour$min$sec" -lt "$starttimes" ]
 	then
@@ -529,6 +638,7 @@ then
 		done
 		getstream
 		echo -e "${GRN}"'\nJob Finished, Code: 2\n'"${NC}"
+		exit 0
 	else
 		echo -e "${RED}"'\nERROR: 1\n'"${NC}"
 		exit -1
@@ -577,6 +687,7 @@ then
 		echo -e "${YLW}"'쇼가 시작됨\n'"${NC}"
 		getstream
 		echo -e "${GRN}"'\nJob Finished, Code: 3\n'"${NC}"
+		exit 0
 	# 시작 시간이 안됐을 경우
 	elif [ "$hour$min$sec" -lt "$starttimes" ]
 	then
@@ -599,6 +710,7 @@ then
 		echo -e "${YLW}"'\n * TEST POINT 2\n'"${NC}"
 		getstream
 		echo -e "${GRN}"'\nJob Finished, Code: 4\n'"${NC}"
+		exit 0
 	else
 		echo -e "${RED}"'\nERROR: 2\n'"${NC}"
 		exit -1
@@ -607,3 +719,6 @@ else
 	echo -e "${RED}"'\nERROR: 3\n'"${NC}"
 	exit -1
 fi
+
+echo -e "${RED}"'\nERROR: EOF\n'"${NC}"
+exit -1
