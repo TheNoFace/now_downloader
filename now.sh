@@ -13,8 +13,7 @@ YLW='\033[1;33m' # Warning or alert
 GRN='\033[0;32m'
 NC='\033[0m' # No Color
 
-# directory to save; USE ORIGINAL LINK, NOT SYMLINKS
-opath=/srv/mount/ssd0/now
+opath=/srv/mount/ssd0/now # directory to save; USE ORIGINAL LINK, NOT SYMLINKS
 today=$(date +'%Y-%m-%d')
 
 if [ "$#" -eq 2 ]
@@ -88,32 +87,54 @@ else
 fi
 echo
 
+if [ ! -d "$opath"/content ]
+then
+	echo -e "${YLW}content folder does not exitst, creating...\n${NC}"
+	mkdir "$opath"/content
+else
+	echo -e 'content folder exists\n'
+fi
+if [ ! -d "$opath"/log ]
+then
+	echo -e "${YLW}log folder does not exitst, creating...\n${NC}"
+	mkdir "$opath"/log
+else
+	echo -e 'log folder exists\n'
+fi
+if [ ! -d "$opath"/show ]
+then
+	echo -e "${YLW}show folder does not exitst, creating...\n${NC}"
+	mkdir "$opath"/show
+else
+	echo -e 'show folder exists\n'
+fi
+
 function contentget()
 {
 	ctlength=$(curl --head https://now.naver.com/api/nnow/v1/stream/$number/content | grep -oP 'content-length: \K[0-9]*')
 	echo -e '\ncontent_length: '"$ctlength"
 	if [ "$ctlength" -lt 2000 ]
 	then
-		retry=0
+		ctretry=0
+		echo -e "${YLW}\ncontent 파일이 올바르지 않음, 1초 후 재시도${NC}"
 		while :
 		do
-			echo -e "${YLW}"'\ncontent 파일이 올바르지 않음, 1초 후 재시도'"${NC}"
-			: $((retry++))
+			((ctretry++))
 			timer=1
 			counter
-			echo -e '\n재시도 횟수: '"$retry"' / 최대 재시도 횟수: '"$maxretry"'\n'
+			echo -e "재시도 횟수: $ctretry / 최대 재시도 횟수: $maxretry\n"
 			ctlength=$(curl --head https://now.naver.com/api/nnow/v1/stream/$number/content | grep -oP 'content-length: \K[0-9]*')
 			if [ "$ctlength" -lt 2000 ]
 			then
-				if [ "$retry" -lt "$maxretry" ]
+				if [ "$ctretry" -lt "$maxretry" ]
 				then
-					echo -e "${YLW}"'\n다운로드 실패, 3초 후 재시도'"${NC}"
-				elif [ "$retry" -ge "$maxretry" ]
+					echo -e "${YLW}\ncontent 파일이 올바르지 않음, 1초 후 재시도${NC}"
+				elif [ "$ctretry" -ge "$maxretry" ]
 				then
-					echo -e "${RED}"'\n다운로드 실패\n최대 재시도 횟수 초과, 스크립트 종료\n'"${NC}"
+					echo -e "${RED}\n다운로드 실패\n최대 재시도 횟수($maxretry회) 도달, 스크립트 종료\n${NC}"
 					exit -1
 				else
-					echo -e "${RED}"'\nERROR: contentget(): maxretry\n'"${NC}"
+					echo -e "${RED}\nERROR: contentget(): ctretry,maxretry\n${NC}"
 					exit -1
 				fi
 			elif [ "$ctlength" -ge 2000 ]
@@ -126,11 +147,12 @@ function contentget()
 				exit -1
 			fi
 		done
-		unset retry
+		unset ctretry
 	elif [ "$ctlength" -ge 2000 ]
 	then
 		echo -e "${GRN}"'\n정상 content 파일\n'"${NC}"
 		wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
+		unset ctretry
 	else
 		echo -e "${RED}"'\nERROR: contentget(): ctlength 2\n'"${NC}"
 		exit -1
@@ -145,104 +167,21 @@ function getstream()
 	echo '방송시간: '"$starttime"' / 현재: '"$hour"':'"$min"':'"$sec"
 	if [ "$vcheck" = 'true' ]
 	then
+		echo -e "${YLW}\n비디오 스트림 발견, 함께 다운로드 합니다\n${NC}"
 		echo -e '\n'"$title"' E'"$ep"' '"$subjects"
 		echo -e 'Audio: '"$url"'\nVideo: '"$vurl"'\n'
 		echo -e '오디오 파일: '"$filenames"'.ts\n비디오 파일: '"$filenames"'_video.ts\n'
 		youtube-dl "$url" --output "$opath"/show/"$title"/"$filenames".ts &
 		youtube-dl "$vurl" --output "$opath"/show/"$title"/"$filenames"_video.ts
-		if [ "$?" =  '1' ]
-		then
-			if [ "$maxretry" = 0 ]
-			then
-				echo -e "${RED}"'\n다운로드 실패, 스크립트 종료\n'"${NC}"
-				exit -1
-			fi
-			retry=0
-			echo -e "${YLW}"'\n다운로드 실패, 1초 후 재시도'"${NC}"
-			while :
-			do
-				timer=1
-				counter
-				: $((retry++))
-				echo -e '\n재시도 횟수: '"$retry"'\n'
-				wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
-				timeupdate
-				exrefresh
-				youtube-dl "$url" --output "$opath"/show/"$title"/"$filenames".ts &
-				youtube-dl "$vurl" --output "$opath"/show/"$title"/"$filenames"_video.ts
-				if [ "$?" =  '1' ]
-				then
-					if [ "$retry" -lt "$maxretry" ]
-					then
-						echo -e "${YLW}"'\n다운로드 실패, 1초 후 재시도'"${NC}"
-					elif [ "$retry" -ge "$maxretry" ]
-					then
-						echo -e "${RED}"'\n다운로드 실패\n최대 재시도 횟수 초과, 스크립트 종료\n'"${NC}"
-						exit -1
-					else
-						echo -e "${RED}"'\nERROR: getstream(): maxretry 1\n'"${NC}"
-						exit -1
-					fi
-				else
-					echo -e "${GRN}"'\n다운로드 성공'"${NC}"
-					echo -e '\n총 재시도 횟수: '"$retry"
-					unset retry
-					break
-				fi
-			done
-		fi
-		echo -e "${GRN}"'\n다운로드 완료, 3초 대기'"${NC}"
-		timer=3
-		counter
+		gsretry
 	else
+		echo -e "${YLW}\n비디오 스트림 없음, 오디오만 다운로드 합니다${NC}"
 		echo -e '\n'"$title"' E'"$ep"' '"$subjects"'\n'"$url"'\n\n파일 이름: '"$filenames"'.ts\n'
 		youtube-dl "$url" --output "$opath"/show/"$title"/"$filenames".ts
-		if [ "$?" =  '1' ]
-		then
-			if [ "$maxretry" = 0 ]
-			then
-				echo -e "${RED}"'\n다운로드 실패, 스크립트 종료\n'"${NC}"
-				exit -1
-			fi
-			retry=0
-			echo -e "${YLW}"'\n다운로드 실패, 1초 후 재시도'"${NC}"
-			while :
-			do
-				timer=1
-				counter
-				: $((retry++))
-				echo -e '\n재시도 횟수: '"$retry"' / 최대 재시도 횟수: '"$maxretry"'\n'
-				wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
-				timeupdate
-				exrefresh
-				youtube-dl "$url" --output "$opath"/show/"$title"/"$filenames".ts
-				if [ "$?" =  '1' ]
-				then
-					if [ "$retry" -lt "$maxretry" ]
-					then
-						echo -e "${YLW}"'\n다운로드 실패, 1초 후 재시도'"${NC}"
-					elif [ "$retry" -ge "$maxretry" ]
-					then
-						echo -e "${RED}"'\n다운로드 실패\n최대 재시도 횟수 초과, 스크립트 종료\n'"${NC}"
-						exit -1
-					else
-						echo -e "${RED}"'\nERROR: getstream(): maxretry 2\n'"${NC}"
-						exit -1
-					fi
-				else
-					echo -e "${GRN}"'\n다운로드 성공'"${NC}"
-					echo -e '\n총 재시도 횟수: '"$retry"
-					unset retry
-					break
-				fi
-			done
-		fi
-		echo -e "${GRN}"'\n다운로드 완료, 3초 대기'"${NC}"
-		timer=3
-		counter
+		gsretry
 	fi
 	ptime=$(ffprobe -v error -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "$opath"/show/"$title"/"$filenames".ts | grep -o '^[^.]*')
-	echo -e '\n스트리밍 시간: '"$ptime"'s / 스트리밍 정상 종료 기준: '"$ptimeth"'s'
+	echo -e "스트리밍 시간: $ptime초 / 스트리밍 정상 종료 기준: $ptimeth초"
 	if [ "$ptime" -lt "$ptimeth" ]
 	then
 		if [ -z "$sfailcheck" ]
@@ -270,6 +209,46 @@ function getstream()
 	fi
 }
 
+function gsretry()
+{
+	if [ "$?" =  '1' ]
+	then
+		if [ "$maxretry" = 0 ]
+		then
+			echo -e "${RED}\n다운로드 실패, 스크립트 종료\n${NC}"
+			exit -1
+		fi
+		if [ -n "$retry" ]
+		then
+			echo -e "\n재시도 횟수: $retry / 최대 재시도 횟수: $maxretry"
+		fi
+		if [ -z "$retry" ] || [ "$retry" -lt "$maxretry" ]
+		then
+			echo -e "${YLW}\n다운로드 실패, 재시도 합니다\n${NC}"
+			((retry++))
+		elif [ "$retry" -ge "$maxretry" ]
+		then
+			echo -e "${RED}\n다운로드 실패\n최대 재시도 횟수($maxretry회) 도달, 스크립트 종료\n${NC}"
+			exit -1
+		else
+			echo -e "${RED}\nERROR: getstream(): maxretry 1\n${NC}"
+			exit -1
+		fi
+		getstream
+	else
+		if [ -z "$retry" ]
+		then
+			retry=0
+		fi
+		echo -e "${GRN}\n다운로드 성공${NC}"
+		echo -e "\n총 재시도 횟수: $retry"
+	fi
+	unset retry
+	echo -e "${GRN}\n다운로드 완료, 3초 대기${NC}"
+	timer=3
+	counter
+}
+
 function convert()
 {
 	codec=$(ffprobe -v error -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$opath"/show/"$title"/"$filenames".ts)
@@ -287,12 +266,15 @@ function convert()
 		echo -e "${RED}"'\nERROR: : Unable to get codec info\n'"${NC}"
 		exit -1
 	fi
+	echo -e "${GRN}\nJob Finished, Code: $sreason\n${NC}"
+	exit 0
 }
 
 function exrefresh()
 {
 	title=$(cat "$opath"/content/"$date"_"$number".content | grep -oP '"home":{"title":{"text":"\K[^"]+')
 	url=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'streamUrl":"\K[^"]+')
+	vcheck=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'video":\K[^,]+')
 	if [ "$vcheck" = 'true' ]
 	then
 		vurl=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'videoStreamUrl":"\K[^"]+')
@@ -331,7 +313,7 @@ function counter()
 	do
 		echo -ne "$timer\033[0K"'초 남음'"\r"
 		sleep 1
-		: $((timer--))
+		((timer--))
 	done
 	unset timer
 	echo -e '\n'
@@ -544,31 +526,8 @@ function samedatesleep()
 }
 
 # Start of script
-if [ ! -d "$opath"/content ]
-then
-	echo -e "${YLW}content folder does not exitst, creating...\n${NC}"
-	mkdir "$opath"/content
-else
-	echo -e 'content folder exists\n'
-fi
-if [ ! -d "$opath"/log ]
-then
-	echo -e "${YLW}log folder does not exitst, creating...\n${NC}"
-	mkdir "$opath"/log
-else
-	echo -e 'log folder exists\n'
-fi
-if [ ! -d "$opath"/show ]
-then
-	echo -e "${YLW}show folder does not exitst, creating...\n${NC}"
-	mkdir "$opath"/show
-else
-	echo -e 'show folder exists\n'
-fi
-
 date=$(date +'%y%m%d')
-wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
-vcheck=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'video":\K[^,]+')
+contentget
 exrefresh
 timeupdate
 
@@ -580,7 +539,8 @@ else
 fi
 
 echo '방송일  : '"$startdates"' / 오늘: '"$date"
-echo -e '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"'\n'
+echo -e "방송시간: $starttimes / 현재: $hour$min$sec"
+echo -e "$title E$ep $subjects\n"
 
 if [ -n "$custimer" ]
 then
@@ -599,10 +559,13 @@ fi
 if [ "$1" = "-f" ] && [ -n "$2" ]
 then
 	echo -e "${YLW}"'Force Download Enabled!\n'"${NC}"
+	sreason="-f"
 	getstream
-	echo -e "${GRN}"'\nJob Finished, Code: -f\n'"${NC}"
-	exit 0
 fi
+
+contentget
+exrefresh
+timeupdate
 
 # 시작일이 다를 경우
 if [ "$date" != "$startdates" ]
@@ -614,9 +577,8 @@ then
 	if [ "$hour$min$sec" -ge "$starttimes" ]
 	then
 		echo -e "${YLW}"'쇼가 시작됨\n'"${NC}"
+		sreason=1
 		getstream
-		echo -e "${GRN}"'\nJob Finished, Code: 1\n'"${NC}"
-		exit 0
 	# 시작 시간이 안됐을 경우
 	elif [ "$hour$min$sec" -lt "$starttimes" ]
 	then
@@ -636,9 +598,8 @@ then
 				break
 			fi
 		done
+		sreason=2
 		getstream
-		echo -e "${GRN}"'\nJob Finished, Code: 2\n'"${NC}"
-		exit 0
 	else
 		echo -e "${RED}"'\nERROR: 1\n'"${NC}"
 		exit -1
@@ -685,9 +646,8 @@ then
 		echo -e "${YLW}"'\n * TEST POINT 1\n'"${NC}"
 		#samedatesleep
 		echo -e "${YLW}"'쇼가 시작됨\n'"${NC}"
+		sreason=3
 		getstream
-		echo -e "${GRN}"'\nJob Finished, Code: 3\n'"${NC}"
-		exit 0
 	# 시작 시간이 안됐을 경우
 	elif [ "$hour$min$sec" -lt "$starttimes" ]
 	then
@@ -708,9 +668,8 @@ then
 			fi
 		done
 		echo -e "${YLW}"'\n * TEST POINT 2\n'"${NC}"
+		sreason=4
 		getstream
-		echo -e "${GRN}"'\nJob Finished, Code: 4\n'"${NC}"
-		exit 0
 	else
 		echo -e "${RED}"'\nERROR: 2\n'"${NC}"
 		exit -1
