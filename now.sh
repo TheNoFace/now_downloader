@@ -4,8 +4,13 @@
 # 3) 오전 스트리밍 구분 추가
 # 4) 날이 하루 이상 차이날 경우 12시간 타이머 -> 시작일자 입력해서 하루 이상 차이나면 12시간 타이머
 # 5) diffdatesleep()와 samedatesleep() 합치기
+# 6) 방송 시각과 현재 시각 차이가 20분 이상이면 (시각차이-20)분 sleep
 
 # 스크립트 시작엔 contentget/exrefresh/timeupdate 순서, 이후 사용시 contentget/timeupdate/exrefresh 사용
+
+# 200521
+# content: general information of show
+# livestatus: audio/video stream information of show
 
 # Color template: echo -e "${RED}TITLE${GRN}MESSAGE${NC}"
 RED='\033[0;31m' # Error or force exit
@@ -29,6 +34,7 @@ then
 			echo -e "${YLW}"'\nForce Download Enabled!'"${NC}"
 			echo -e 'ShowID: '"$2"'\n'
 			number="$2"
+			force=1
 		fi
 	else
 		echo "Usage: now (-f) ShowID"
@@ -112,11 +118,12 @@ fi
 function contentget()
 {
 	ctlength=$(curl --head https://now.naver.com/api/nnow/v1/stream/$number/content | grep -oP 'content-length: \K[0-9]*')
-	echo -e '\ncontent_length: '"$ctlength"
-	if [ "$ctlength" -lt 2000 ]
+	lslength=$(curl --head https://now.naver.com/api/nnow/v1/stream/$number/livestatus | grep -oP 'content-length: \K[0-9]*')
+	echo -e "\nctlength: $ctlength / lslength: $lslength"
+	if [ "$ctlength" -lt 2000 ] && [ "$lslength" -lt 1000 ]
 	then
 		ctretry=0
-		echo -e "${YLW}\ncontent 파일이 올바르지 않음, 1초 후 재시도${NC}"
+		echo -e "${YLW}\ncontent/livestatus 파일이 올바르지 않음, 1초 후 재시도${NC}"
 		while :
 		do
 			((ctretry++))
@@ -124,11 +131,13 @@ function contentget()
 			counter
 			echo -e "재시도 횟수: $ctretry / 최대 재시도 횟수: $maxretry\n"
 			ctlength=$(curl --head https://now.naver.com/api/nnow/v1/stream/$number/content | grep -oP 'content-length: \K[0-9]*')
-			if [ "$ctlength" -lt 2000 ]
+			lslength=$(curl --head https://now.naver.com/api/nnow/v1/stream/$number/livestatus | grep -oP 'content-length: \K[0-9]*')
+			echo -e "\nctlength: $ctlength / lslength: $lslength"
+			if [ "$ctlength" -lt 2000 ] && [ "$lslength" -lt 1000 ]
 			then
 				if [ "$ctretry" -lt "$maxretry" ]
 				then
-					echo -e "${YLW}\ncontent 파일이 올바르지 않음, 1초 후 재시도${NC}"
+					echo -e "${YLW}\ncontent/livestatus 파일이 올바르지 않음, 1초 후 재시도${NC}"
 				elif [ "$ctretry" -ge "$maxretry" ]
 				then
 					echo -e "${RED}\n다운로드 실패\n최대 재시도 횟수($maxretry회) 도달, 스크립트 종료\n${NC}"
@@ -137,10 +146,11 @@ function contentget()
 					echo -e "${RED}\nERROR: contentget(): ctretry,maxretry\n${NC}"
 					exit -1
 				fi
-			elif [ "$ctlength" -ge 2000 ]
+			elif [ "$ctlength" -ge 2000 ] && [ "$lslength" -ge 1000 ]
 			then
-				echo -e "${GRN}"'\n정상 content 파일\n'"${NC}"
+				echo -e "${GRN}\n정상 content/livestatus 파일\n${NC}"
 				wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
+				wget -O "$opath"/content/"$date"_"$number".livestatus https://now.naver.com/api/nnow/v1/stream/"$number"/livestatus
 				break
 			else
 				echo -e "${RED}"'\nERROR: contentget(): ctlength 1\n'"${NC}"
@@ -148,10 +158,11 @@ function contentget()
 			fi
 		done
 		unset ctretry
-	elif [ "$ctlength" -ge 2000 ]
+	elif [ "$ctlength" -ge 2000 ] && [ "$lslength" -ge 1000 ]
 	then
-		echo -e "${GRN}"'\n정상 content 파일\n'"${NC}"
+		echo -e "${GRN}\n정상 content/livestatus 파일\n${NC}"
 		wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
+		wget -O "$opath"/content/"$date"_"$number".livestatus https://now.naver.com/api/nnow/v1/stream/"$number"/livestatus
 		unset ctretry
 	else
 		echo -e "${RED}"'\nERROR: contentget(): ctlength 2\n'"${NC}"
@@ -272,18 +283,20 @@ function convert()
 
 function exrefresh()
 {
-	title=$(cat "$opath"/content/"$date"_"$number".content | grep -oP '"home":{"title":{"text":"\K[^"]+')
-	url=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'streamUrl":"\K[^"]+')
+	title=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'home":{"title":{"text":"\K[^"]+')
+	url=$(cat "$opath"/content/"$date"_"$number".livestatus | grep -oP 'liveStreamUrl":"\K[^"]+')
 	vcheck=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'video":\K[^,]+')
 	if [ "$vcheck" = 'true' ]
 	then
-		vurl=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'videoStreamUrl":"\K[^"]+')
+		vurl=$(cat "$opath"/content/"$date"_"$number".livestatus | grep -oP 'videoStreamUrl":"\K[^"]+')
 	fi
 	startdate=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'start":"20\K[^T]+')
+	#enddate=$(cat "$opath"/content/"$date"_"$number".livestatus | grep -oP '"endDatetime":"20\K[^T]+')
 	starttime=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'start":"\K[^"]+' | grep -oP 'T\K[^.+]+')
 	subject=$(cat "$opath"/content/"$date"_"$number".content | grep -oP '},"title":{"text":"\K[^"]+')
 	ep=$(cat "$opath"/content/"$date"_"$number".content | grep -oP '"count":"\K[^회"]+')
 	#showhost=$(cat "$opath"/content/"$date"_"$number".content | grep -oP '"host":\["\K[^"]+')
+	#onair=$(cat "$opath"/content/"$date"_"$number".livestatus | grep -oP $number'","status":"\K[^"]+') # READY | ONAIR
 	filename="$date"."NAVER NOW"."$title".E"$ep"."$subjects"_"$hour$min$sec"
 	filenames=${filename//'/'/.}
 	subjects=${subject//'\r\n'/}
@@ -327,7 +340,7 @@ function diffdatesleep()
 		timeupdate	
 		echo -e 'Time difference: '"$timecheck"' min'
 		counter
-		echo -e 'content 다시 불러오는 중...\n'
+		echo -e 'content/livestatus 다시 불러오는 중...\n'
 		contentget
 		timeupdate
 		exrefresh
@@ -385,18 +398,18 @@ function diffdatesleep()
 		elif [ "$timecheck" -lt 65 ]
 		then
 			# 시작 시간이 10분 초과 차이
-			if [ "$timecheck" -gt 10 ]
+			if [ "$timecheck" -gt 12 ]
 			then
 				timer=600
 			# 시작 시간이 10분 이하 차이
-			elif [ "$timecheck" -le 10 ]
+			elif [ "$timecheck" -le 12 ]
 			then
 				# 시작 시간이 2분 초과 차이
-				if [ "$timecheck" -gt 2 ]
+				if [ "$timecheck" -gt 3 ]
 				then
 					timer=60
 				# 시작 시간이 2분 이하 차이
-				elif [ "$timecheck" -le 2 ]
+				elif [ "$timecheck" -le 3 ]
 				then
 					timer=1
 				else
@@ -556,9 +569,9 @@ else
 	exit -1
 fi
 
-if [ "$1" = "-f" ] && [ -n "$2" ]
+if [ "$force" = "1" ] && [ -n "$number" ]
 then
-	echo -e "${YLW}"'Force Download Enabled!\n'"${NC}"
+	echo -e "${YLW}Force Download Enabled!\n${NC}"
 	sreason="-f"
 	getstream
 fi
