@@ -296,7 +296,7 @@ function exrefresh()
 	subject=$(cat "$opath"/content/"$date"_"$number".content | grep -oP '},"title":{"text":"\K[^"]+')
 	ep=$(cat "$opath"/content/"$date"_"$number".content | grep -oP '"count":"\K[^회"]+')
 	#showhost=$(cat "$opath"/content/"$date"_"$number".content | grep -oP '"host":\["\K[^"]+')
-	#onair=$(cat "$opath"/content/"$date"_"$number".livestatus | grep -oP $number'","status":"\K[^"]+') # READY | ONAIR
+	onair=$(cat "$opath"/content/"$date"_"$number".livestatus | grep -oP $number'","status":"\K[^"]+') # READY | ONAIR
 	filename="$date"."NAVER NOW"."$title".E"$ep"."$subjects"_"$hour$min$sec"
 	filenames=${filename//'/'/.}
 	subjects=${subject//'\r\n'/}
@@ -425,13 +425,24 @@ function diffdatesleep()
 			exit -1
 		fi
 		# 시작일 확인
-		if [ "$date" = "$startdates" ]
+		if [ "$onair" = "READY" ]
 		then
-			echo '방송일  : '"$startdates"' / 오늘: '"$date"
-			echo '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"
-			echo -e "${GRN}"'\ncontent 불러오기 완료\n'"${NC}"
+			echo -e "Live Status: ${YLW}$onair\n${NC}"
+		elif [ "$onair" = "ONAIR" ]
+		then
+			echo -e "Live Status: ${GRN}$onair\n${NC}"
 			break
+		else
+			echo -e "${RED}\nERROR: diffdatesleep(): onair\n${NC}"
+			exit -1
 		fi
+		#if [ "$date" = "$startdates" ]
+		#then
+		#	echo '방송일  : '"$startdates"' / 오늘: '"$date"
+		#	echo '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"
+		#	echo -e "${GRN}"'\ncontent 불러오기 완료\n'"${NC}"
+		#	break
+		#fi
 	done
 }
 
@@ -561,9 +572,15 @@ then
 	timer=$custimer
 	counter
 	unset timer
+	contentget
+	exrefresh
+	timeupdate
 elif [ -z "$custimer" ]
 then
 	echo -e "사용자가 설정한 시작 대기 타이머가 없음\n"
+	contentget
+	exrefresh
+	timeupdate
 else
 	echo -e "${RED}\nERROR: custimer\n${NC}"
 	exit -1
@@ -575,10 +592,6 @@ then
 	sreason="-f"
 	getstream
 fi
-
-contentget
-exrefresh
-timeupdate
 
 # 시작일이 다를 경우
 if [ "$date" != "$startdates" ]
