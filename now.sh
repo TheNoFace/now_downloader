@@ -3,8 +3,10 @@
 # TODO:
 # 3) 오전 스트리밍 구분 추가
 # 4) 날이 하루 이상 차이날 경우 12시간 타이머 -> 시작일자 입력해서 하루 이상 차이나면 12시간 타이머
-# 5) diffdatesleep()와 samedatesleep() 합치기
+# 5) diffdatesleep()와 samedatesleep() 합치기; diffdatesleep() -> onairwait()
 # 6) 방송 시각과 현재 시각 차이가 20분 이상이면 (시각차이-20)분 sleep
+# 7) cusdate 삭제 및 TODO 3,4) 삭제
+# 8) 방송 시작 검사를 시간 말고 $onair로 확인
 
 # 스크립트 시작엔 contentget/exrefresh/timeupdate 순서, 이후 사용시 contentget/timeupdate/exrefresh 사용
 
@@ -15,7 +17,6 @@ GRN='\033[0;32m'
 NC='\033[0m' # No Color
 
 opath=/srv/mount/ssd0/now # directory to save; USE ORIGINAL LINK, NOT SYMLINKS
-today=$(date +'%Y-%m-%d')
 
 if [ "$#" -eq 2 ]
 then
@@ -70,16 +71,8 @@ then
 else
 	echo -e "${YLW}"'Failcheck threshold set to '"$ptimeth""${NC}"
 fi
-# TODO 4)
-echo -ne "\nCustom start date (Today: $today / Skip if you don't want): "
-read cusdate
-if [ -z "$cusdate" ]
-then
-	echo -e "${YLW}Custom start date is not set${NC}"
-else
-	echo -e "${YLW}Custom start date set to $cusdate${NC}"
-fi
-echo -ne "\nCustom sleep timer before starting script (in seconds / Skip if you don't want): "
+echo -e "${YLW}\nWARNING: Mandatory if today is not the broadcasting day${NC}"
+echo -ne "Custom sleep timer before starting script (in seconds / Skip if you don't want) : "
 read custimer
 if [ -z "$custimer" ]
 then
@@ -118,7 +111,7 @@ function contentget()
 	ctlength=$(curl --head https://now.naver.com/api/nnow/v1/stream/$number/content | grep -oP 'content-length: \K[0-9]*')
 	lslength=$(curl --head https://now.naver.com/api/nnow/v1/stream/$number/livestatus | grep -oP 'content-length: \K[0-9]*')
 	echo -e "\nctlength: $ctlength / lslength: $lslength"
-	if [ "$ctlength" -lt 2000 ] && [ "$lslength" -lt 1000 ]
+	if [ "$ctlength" -lt 2500 ] && [ "$lslength" -lt 1000 ]
 	then
 		ctretry=0
 		echo -e "${YLW}\ncontent/livestatus 파일이 올바르지 않음, 1초 후 재시도${NC}"
@@ -131,7 +124,7 @@ function contentget()
 			ctlength=$(curl --head https://now.naver.com/api/nnow/v1/stream/$number/content | grep -oP 'content-length: \K[0-9]*')
 			lslength=$(curl --head https://now.naver.com/api/nnow/v1/stream/$number/livestatus | grep -oP 'content-length: \K[0-9]*')
 			echo -e "\nctlength: $ctlength / lslength: $lslength"
-			if [ "$ctlength" -lt 2000 ] && [ "$lslength" -lt 1000 ]
+			if [ "$ctlength" -lt 2500 ] && [ "$lslength" -lt 1000 ]
 			then
 				if [ "$ctretry" -lt "$maxretry" ]
 				then
@@ -144,7 +137,7 @@ function contentget()
 					echo -e "${RED}\nERROR: contentget(): ctretry,maxretry\n${NC}"
 					exit -1
 				fi
-			elif [ "$ctlength" -ge 2000 ] && [ "$lslength" -ge 1000 ]
+			elif [ "$ctlength" -ge 2500 ] && [ "$lslength" -ge 1000 ]
 			then
 				echo -e "${GRN}\n정상 content/livestatus 파일\n${NC}"
 				wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
@@ -156,7 +149,7 @@ function contentget()
 			fi
 		done
 		unset ctretry
-	elif [ "$ctlength" -ge 2000 ] && [ "$lslength" -ge 1000 ]
+	elif [ "$ctlength" -ge 2500 ] && [ "$lslength" -ge 1000 ]
 	then
 		echo -e "${GRN}\n정상 content/livestatus 파일\n${NC}"
 		wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
@@ -195,9 +188,9 @@ function getstream()
 	then
 		if [ -z "$sfailcheck" ]
 		then
-			echo -e "${RED}\n스트리밍이 정상 종료되지 않음, 20초 후 재시작${NC}"
+			echo -e "${RED}\n스트리밍이 정상 종료되지 않음, 1분 후 재시작${NC}"
 			sfailcheck=1
-			timer=20
+			timer=60
 			counter
 			getstream
 		elif [ -n "$sfailcheck" ]
@@ -281,6 +274,8 @@ function convert()
 
 function exrefresh()
 {
+	#showhost=$(cat "$opath"/content/"$date"_"$number".content | grep -oP '"host":\["\K[^"]+')
+	#enddate=$(cat "$opath"/content/"$date"_"$number".livestatus | grep -oP '"endDatetime":"20\K[^T]+')
 	title=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'home":{"title":{"text":"\K[^"]+')
 	url=$(cat "$opath"/content/"$date"_"$number".livestatus | grep -oP 'liveStreamUrl":"\K[^"]+')
 	vcheck=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'video":\K[^,]+')
@@ -289,11 +284,9 @@ function exrefresh()
 		vurl=$(cat "$opath"/content/"$date"_"$number".livestatus | grep -oP 'videoStreamUrl":"\K[^"]+')
 	fi
 	startdate=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'start":"20\K[^T]+')
-	#enddate=$(cat "$opath"/content/"$date"_"$number".livestatus | grep -oP '"endDatetime":"20\K[^T]+')
 	starttime=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'start":"\K[^"]+' | grep -oP 'T\K[^.+]+')
 	subject=$(cat "$opath"/content/"$date"_"$number".content | grep -oP '},"title":{"text":"\K[^"]+')
 	ep=$(cat "$opath"/content/"$date"_"$number".content | grep -oP '"count":"\K[^회"]+')
-	#showhost=$(cat "$opath"/content/"$date"_"$number".content | grep -oP '"host":\["\K[^"]+')
 	onair=$(cat "$opath"/content/"$date"_"$number".livestatus | grep -oP $number'","status":"\K[^"]+') # READY | ONAIR
 	filename="$date"."NAVER NOW"."$title".E"$ep"."$subjects"_"$hour$min$sec"
 	filenames=${filename//'/'/.}
@@ -330,11 +323,11 @@ function counter()
 	echo -e '\n'
 }
 
-function diffdatesleep()
+function onairwait()
 {
 	while :
 	do
-		echo -e '방송일이 아닙니다\n'
+		echo -e '방송이 시작되지 않았습니다\n'
 		timeupdate	
 		echo -e 'Time difference: '"$timecheck"' min'
 		counter
@@ -346,49 +339,11 @@ function diffdatesleep()
 		echo '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"
 		if [ "$vcheck" = 'true' ]
 		then
-			echo -e '\n'"$title"' E'"$ep"' '"$subjects"
-			echo -e 'Audio: '"$url"'\nVideo: '"$vurl"'\n'
+			echo -e "\n$title E$ep $subjects"
+			echo -e "Audio: $url\nVideo: $vurl\n"
 		else
-			echo -e '\n'"$title"' E'"$ep"' '"$subjects"'\n'"$url"
+			echo -e "\n$title E$ep $subjects\n$url\n"
 		fi
-		echo
-		# TODO 4)
-		if [ -n "$cusdate" ]
-		then
-			while :
-			do
-				todate=$(date +'%d')
-				datediff=$(expr "$cusdate" - "$todate")
-				echo -e '사용자 설정 방송 일자 차이: '"$datediff"
-				if [ "$datediff" -gt 1 ]
-				then
-					echo -e "${YLW}\n방송일($cusdate일)이 하루 이상 남았습니다\n24시간 동안 대기합니다${NC}"
-					timer=86400
-					counter
-				elif [ "$datediff" -le 1 ]
-				then
-					echo -e "${YLW}\n방송일이 하루 이하 남았습니다${NC}"
-					break
-				else
-					echo -e "${RED}\nERROR: diffdatesleep(): cusdate,stdate,datediff 1 \n${NC}"
-					exit -1
-				fi
-			done
-		elif [ -z "$cusdate" ]
-		then
-			echo -e "${YLW}설정된 방송일이 없습니다\n${NC}"
-		else
-			echo -e "${RED}\nERROR: diffdatesleep(): cusdate,stdate,datediff 1 \n${NC}"
-			exit -1
-		fi
-		# TODO 4)
-		#if [ "$stimehr" -lt 12 ] && [ "$hour" -gt 12] # 시작 시간이 오전, 현재 시간이 오후일 경우
-		#then
-		#	breakhr=$(echo "($stimehr+24-$hour-1)*60*60 | bc -l)
-		#	timer=$breakhr
-		#	counter
-		#if [ $(expr $stimehr + 24 - $hour) -gt 1 ] # 시작 시간과 현재 시간이 1시간 이상 차이
-		# 시작 시간이 65분 이상 차이
 		if [ "$timecheck" -ge 65 ]
 		then
 			timer=3600
@@ -411,15 +366,15 @@ function diffdatesleep()
 				then
 					timer=1
 				else
-					echo -e "${RED}"'\nERROR: diffdatesleep(): 1\n'"${NC}"
+					echo -e "${RED}\nERROR: onairwait(): 1\n${NC}"
 					exit -1
 				fi
 			else
-				echo -e "${RED}"'\nERROR: diffdatesleep(): 2\n'"${NC}"
+				echo -e "${RED}\nERROR: onairwait(): 2\n${NC}"
 				exit -1
 			fi
 		else
-			echo -e "${RED}"'\nERROR: diffdatesleep(): 3\n'"${NC}"
+			echo -e "${RED}\nERROR: onairwait(): 3\n${NC}"
 			exit -1
 		fi
 		# 방송 상태 확인
@@ -429,120 +384,15 @@ function diffdatesleep()
 		elif [ "$onair" = "ONAIR" ]
 		then
 			echo -e "Live Status: ${GRN}$onair\n${NC}"
+			echo -e "${GRN}content/livestatus 불러오기 완료\n${NC}"
 			break
+		elif [ -z "$onair" ]
+		then
+			echo -e "${YLW}\nWARNING: onairwait(): onair returned null"
+			echo -e "Retrying...\n${NC}"
 		else
-			echo -e "${RED}\nERROR: diffdatesleep(): onair\n${NC}"
+			echo -e "${RED}\nERROR: onairwait(): onair\n${NC}"
 			exit -1
-		fi
-		#if [ "$date" = "$startdates" ]
-		#then
-		#	echo '방송일  : '"$startdates"' / 오늘: '"$date"
-		#	echo '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"
-		#	echo -e "${GRN}"'\ncontent 불러오기 완료\n'"${NC}"
-		#	break
-		#fi
-	done
-}
-
-function samedatesleep()
-{
-	while :
-	do
-		echo -e '방송일입니다\n'
-		timeupdate	
-		echo -e 'Time difference: '"$timecheck"' min'
-		counter
-		echo -e 'content 다시 불러오는 중...\n'
-		contentget
-		timeupdate
-		exrefresh
-		echo -e '방송일  : '"$startdates"' / 오늘: '"$date"
-		echo '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"
-		if [ "$vcheck" = 'true' ]
-		then
-			echo -e '\n'"$title"' E'"$ep"' '"$subjects"
-			echo -e 'Audio: '"$url"'\nVideo: '"$vurl"'\n'
-		else
-			echo -e '\n'"$title"' E'"$ep"' '"$subjects"'\n'"$url"
-		fi
-		echo
-		# TODO 4)
-		if [ -n "$cusdate" ]
-		then
-			while :
-			do
-				todate=$(date +'%d')
-				datediff=$(expr "$cusdate" - "$todate")
-				echo -e '사용자 설정 방송 일자 차이: '"$datediff"
-				if [ "$datediff" -gt 1 ]
-				then
-					echo -e "${YLW}\n방송일($cusdate일)이 하루 이상 남았습니다\n24시간 동안 대기합니다${NC}"
-					timer=86400
-					counter
-				elif [ "$datediff" -le 1 ]
-				then
-					echo -e "${YLW}\n방송일이 하루 이하 남았습니다${NC}"
-					break
-				else
-					echo -e "${RED}\nERROR: diffdatesleep(): cusdate,stdate,datediff 1 \n${NC}"
-					exit -1
-				fi
-			done
-		elif [ -z "$cusdate" ]
-		then
-			echo -e "${YLW}설정된 방송일이 없습니다\n${NC}"
-		else
-			echo -e "${RED}\nERROR: diffdatesleep(): cusdate,stdate,datediff 1 \n${NC}"
-			exit -1
-		fi
-		# TODO 4)
-		#if [ "$stimehr" -lt 12 ] && [ "$hour" -gt 12] # 시작 시간이 오전, 현재 시간이 오후일 경우
-		#then
-		#	breakhr=$(echo "($stimehr+24-$hour-1)*60*60 | bc -l)
-		#	timer=$breakhr
-		#	counter
-		#if [ $(expr $stimehr + 24 - $hour) -gt 1 ] # 시작 시간과 현재 시간이 1시간 이상 차이
-		# 시작 시간이 65분 이상 차이
-		if [ "$timecheck" -ge 65 ]
-		then
-			timer=3600
-		# 시작 시간이 65분 미만 차이
-		elif [ "$timecheck" -lt 65 ]
-		then
-			# 시작 시간이 10분 초과 차이
-			if [ "$timecheck" -gt 10 ]
-			then
-				timer=600
-			# 시작 시간이 10분 이하 차이
-			elif [ "$timecheck" -le 10 ]
-			then
-				# 시작 시간이 2분 초과 차이
-				if [ "$timecheck" -gt 2 ]
-				then
-					timer=60
-				# 시작 시간이 2분 이하 차이
-				elif [ "$timecheck" -le 2 ]
-				then
-					timer=1
-				else
-					echo -e "${RED}"'\nERROR: diffdatesleep(): 1\n'"${NC}"
-					exit -1
-				fi
-			else
-				echo -e "${RED}"'\nERROR: diffdatesleep(): 2\n'"${NC}"
-				exit -1
-			fi
-		else
-			echo -e "${RED}"'\nERROR: diffdatesleep(): 3\n'"${NC}"
-			exit -1
-		fi
-		# 시작일 확인
-		if [ "$date" = "$startdates" ]
-		then
-			echo '방송일  : '"$startdates"' / 오늘: '"$date"
-			echo '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"
-			echo -e "${GRN}"'\ncontent 불러오기 완료\n'"${NC}"
-			break
 		fi
 	done
 }
@@ -591,24 +441,25 @@ then
 	getstream
 fi
 
-# 시작일이 다를 경우
-if [ "$date" != "$startdates" ]
+if [ "$onair" = "READY" ]
 then
+	echo -e "${YLW}* TEST POINT 1 *${NC}"
+	echo -e "Live Status: ${YLW}$onair\n${NC}"
 	timer=0
-	diffdatesleep
+	onairwait
 	contentget
 	timeupdate
 	exrefresh
 	# 시작 시간이 됐을 경우
 	if [ "$hour$min$sec" -ge "$starttimes" ]
 	then
-		echo -e "${YLW}"'쇼가 시작됨\n'"${NC}"
+		echo -e "${GRN}쇼가 시작됨\n${NC}"
 		sreason=1
 		getstream
 	# 시작 시간이 안됐을 경우
 	elif [ "$hour$min$sec" -lt "$starttimes" ]
 	then
-		echo -e '쇼가 아직 시작되지 않음\n'
+		echo -e "${YLW}쇼가 아직 시작되지 않음\n${NC}"
 		while :
 		do
 			echo '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"
@@ -620,88 +471,25 @@ then
 			if [ "$hour$min$sec" -ge "$starttimes" ]
 			then
 				echo '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"
-				echo -e "${YLW}"'쇼가 시작됨\n'"${NC}"
+				echo -e "${GRN}쇼가 시작됨\n${NC}"
 				break
 			fi
 		done
 		sreason=2
 		getstream
 	else
-		echo -e "${RED}"'\nERROR: 1\n'"${NC}"
+		echo -e "${RED}\nERROR: 1\n${NC}"
 		exit -1
 	fi
-# 시작일이 같을 경우
-elif [ "$date" = "$startdates" ]
+elif [ "$onair" = "ONAIR" ]
 then
-	timer=0
-	samedatesleep
-	timeupdate
-	# 시작 시간이 됐을 경우
-	if [ "$hour$min$sec" -ge "$starttimes" ]
-	then
-		# 오전 방송일 경우
-		# TODO 3)
-		#if [ "$starttimes" -gt 0 ] && [ "$starttimes" -lt 120000 ]
-		#then
-		#	echo -e '오전 방송입니다\n'
-		#	#abshr=$(echo "$hourcheck*-1" | bc -l)
-		#	tillmid=$(echo "24-$hour" | bc -l)
-		#	echo -e '남은 시간: 약 '"$(expr $stimehr + $tillmid)"'시간\n'
-		#	#현재 시각에서 00시 까지 남은 시간 계산해서 counter 설정 후 00시 넘길 수 있게
-		#	if [ "$hourcheck" -lt 0 ]
-		#	then
-		#		if [ "$abshr" -ge 1 ]
-		#		then
-		#			echo -e '방송일이 아님'
-		#			while :
-		#			do
-		#				timer=300
-		#				counter
-		#				timeupdate
-		#				exrefresh
-		#				# 시작 시간 확인
-		#				if [ "$hourcheck" -ge 0 ]
-		#				then
-		#					echo -e '방송일이 아님'
-		#					break
-		#				fi
-		#			done
-		#		fi
-		#	fi
-		#fi
-		echo -e "${YLW}"'\n * TEST POINT 1\n'"${NC}"
-		#samedatesleep
-		echo -e "${YLW}"'쇼가 시작됨\n'"${NC}"
-		sreason=3
-		getstream
-	# 시작 시간이 안됐을 경우
-	elif [ "$hour$min$sec" -lt "$starttimes" ]
-	then
-		echo -e '\n쇼가 아직 시작되지 않음'
-		while :
-		do
-			echo '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"
-			echo -e '\n대기 중...('"$hour$min$sec"')'
-			sleep 1
-			timeupdate
-			exrefresh
-			# 시작 시간 확인
-			if [ "$hour$min$sec" -ge "$starttimes" ]
-			then
-				echo '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"
-				echo -e "${YLW}"'쇼가 시작됨\n'"${NC}"
-				break
-			fi
-		done
-		echo -e "${YLW}"'\n * TEST POINT 2\n'"${NC}"
-		sreason=4
-		getstream
-	else
-		echo -e "${RED}"'\nERROR: 2\n'"${NC}"
-		exit -1
-	fi
+	echo -e "${YLW}* TEST POINT 2 *${NC}"
+	echo -e "Live Status: ${GRN}$onair\n${NC}"
+	echo -e "${GRN}쇼가 시작됨\n${NC}"
+	sreason=3
+	getstream
 else
-	echo -e "${RED}"'\nERROR: 3\n'"${NC}"
+	echo -e "${RED}ERROR: 2\n${NC}"
 	exit -1
 fi
 
