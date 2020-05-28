@@ -8,10 +8,6 @@
 
 # 스크립트 시작엔 contentget/exrefresh/timeupdate 순서, 이후 사용시 contentget/timeupdate/exrefresh 사용
 
-# 200521
-# content: general information of show
-# livestatus: audio/video stream information of show
-
 # Color template: echo -e "${RED}TITLE${GRN}MESSAGE${NC}"
 RED='\033[0;31m' # Error or force exit
 YLW='\033[1;33m' # Warning or alert
@@ -115,6 +111,8 @@ else
 	echo -e 'show folder exists\n'
 fi
 
+# content: general information of show
+# livestatus: audio/video stream information of show
 function contentget()
 {
 	ctlength=$(curl --head https://now.naver.com/api/nnow/v1/stream/$number/content | grep -oP 'content-length: \K[0-9]*')
@@ -197,9 +195,9 @@ function getstream()
 	then
 		if [ -z "$sfailcheck" ]
 		then
-			echo -e "${RED}"'\n스트리밍이 정상 종료되지 않음, 15초 후 재시작'"${NC}"
+			echo -e "${RED}\n스트리밍이 정상 종료되지 않음, 20초 후 재시작${NC}"
 			sfailcheck=1
-			timer=15
+			timer=20
 			counter
 			getstream
 		elif [ -n "$sfailcheck" ]
@@ -424,7 +422,7 @@ function diffdatesleep()
 			echo -e "${RED}"'\nERROR: diffdatesleep(): 3\n'"${NC}"
 			exit -1
 		fi
-		# 시작일 확인
+		# 방송 상태 확인
 		if [ "$onair" = "READY" ]
 		then
 			echo -e "Live Status: ${YLW}$onair\n${NC}"
@@ -598,7 +596,9 @@ if [ "$date" != "$startdates" ]
 then
 	timer=0
 	diffdatesleep
+	contentget
 	timeupdate
+	exrefresh
 	# 시작 시간이 됐을 경우
 	if [ "$hour$min$sec" -ge "$starttimes" ]
 	then
