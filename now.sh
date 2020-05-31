@@ -1,14 +1,10 @@
 #!/bin/bash
 
 # TODO:
-# 3) 오전 스트리밍 구분 추가
-# 4) 날이 하루 이상 차이날 경우 12시간 타이머 -> 시작일자 입력해서 하루 이상 차이나면 12시간 타이머
-# 5) diffdatesleep()와 samedatesleep() 합치기; diffdatesleep() -> onairwait()
-# 6) 방송 시각과 현재 시각 차이가 20분 이상이면 (시각차이-20)분 sleep
-# 7) cusdate 삭제 및 TODO 3,4) 삭제
-# 8) 방송 시작 검사를 시간 말고 $onair로 확인
+# 200531-1) 방송 시각과 현재 시각 차이가 20분 이상이면 (시각차이-20)분 sleep
+# 200531-2) ERROR CHECK에 $vcheck = true일 경우 오디오/비디오 스트림 동시에 받기
 
-# 스크립트 시작엔 contentget/exrefresh/timeupdate 순서, 이후 사용시 contentget/timeupdate/exrefresh 사용
+# contentget -> exrefresh -> timeupdate
 
 # Color template: echo -e "${RED}TITLE${GRN}MESSAGE${NC}"
 RED='\033[0;31m' # Error or force exit
@@ -28,7 +24,7 @@ then
 			echo "Use -f to force download"
 			exit -1
 		else
-			echo -e "${YLW}"'\nForce Download Enabled!'"${NC}"
+			echo -e "\n${YLW}Force Download Enabled!${NC}"
 			echo -e 'ShowID: '"$2"'\n'
 			number="$2"
 			force=1
@@ -71,7 +67,7 @@ then
 else
 	echo -e "${YLW}"'Failcheck threshold set to '"$ptimeth""${NC}"
 fi
-echo -e "${YLW}\nWARNING: Mandatory if today is not the broadcasting day${NC}"
+echo -e "\n${YLW}WARNING: Mandatory if today is not the broadcasting day${NC}"
 echo -ne "Custom sleep timer before starting script (in seconds / Skip if you don't want) : "
 read custimer
 if [ -z "$custimer" ]
@@ -84,21 +80,21 @@ echo
 
 if [ ! -d "$opath"/content ]
 then
-	echo -e "${YLW}content folder does not exitst, creating...\n${NC}"
+	echo -e "${YLW}content folder does not exitst, creating...${NC}\n"
 	mkdir "$opath"/content
 else
 	echo -e 'content folder exists\n'
 fi
 if [ ! -d "$opath"/log ]
 then
-	echo -e "${YLW}log folder does not exitst, creating...\n${NC}"
+	echo -e "${YLW}log folder does not exitst, creating...${NC}\n"
 	mkdir "$opath"/log
 else
 	echo -e 'log folder exists\n'
 fi
 if [ ! -d "$opath"/show ]
 then
-	echo -e "${YLW}show folder does not exitst, creating...\n${NC}"
+	echo -e "${YLW}show folder does not exitst, creating...${NC}\n"
 	mkdir "$opath"/show
 else
 	echo -e 'show folder exists\n'
@@ -114,7 +110,7 @@ function contentget()
 	if [ "$ctlength" -lt 2500 ] && [ "$lslength" -lt 1000 ]
 	then
 		ctretry=0
-		echo -e "${YLW}\ncontent/livestatus 파일이 올바르지 않음, 1초 후 재시도${NC}"
+		echo -e "\n${YLW}content/livestatus 파일이 올바르지 않음, 1초 후 재시도${NC}"
 		while :
 		do
 			((ctretry++))
@@ -128,96 +124,63 @@ function contentget()
 			then
 				if [ "$ctretry" -lt "$maxretry" ]
 				then
-					echo -e "${YLW}\ncontent/livestatus 파일이 올바르지 않음, 1초 후 재시도${NC}"
+					echo -e "\n${YLW}content/livestatus 파일이 올바르지 않음, 1초 후 재시도${NC}"
 				elif [ "$ctretry" -ge "$maxretry" ]
 				then
-					echo -e "${RED}\n다운로드 실패\n최대 재시도 횟수($maxretry회) 도달, 스크립트 종료\n${NC}"
+					echo -e "\n${RED}다운로드 실패\n최대 재시도 횟수($maxretry회) 도달, 스크립트 종료${NC}\n"
 					exit -1
 				else
-					echo -e "${RED}\nERROR: contentget(): ctretry,maxretry\n${NC}"
+					echo -e "\n${RED}ERROR: contentget(): ctretry,maxretry${NC}\n"
 					exit -1
 				fi
 			elif [ "$ctlength" -ge 2500 ] && [ "$lslength" -ge 1000 ]
 			then
-				echo -e "${GRN}\n정상 content/livestatus 파일\n${NC}"
+				echo -e "\n${GRN}정상 content/livestatus 파일${NC}\n"
 				wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
 				wget -O "$opath"/content/"$date"_"$number".livestatus https://now.naver.com/api/nnow/v1/stream/"$number"/livestatus
 				break
 			else
-				echo -e "${RED}"'\nERROR: contentget(): ctlength 1\n'"${NC}"
+				echo -e "\n${RED}ERROR: contentget(): ctlength 1${NC}\n"
 				exit -1
 			fi
 		done
 		unset ctretry
 	elif [ "$ctlength" -ge 2500 ] && [ "$lslength" -ge 1000 ]
 	then
-		echo -e "${GRN}\n정상 content/livestatus 파일\n${NC}"
+		echo -e "\n${GRN}정상 content/livestatus 파일${NC}\n"
 		wget -O "$opath"/content/"$date"_"$number".content https://now.naver.com/api/nnow/v1/stream/"$number"/content
 		wget -O "$opath"/content/"$date"_"$number".livestatus https://now.naver.com/api/nnow/v1/stream/"$number"/livestatus
 		unset ctretry
 	else
-		echo -e "${RED}"'\nERROR: contentget(): ctlength 2\n'"${NC}"
+		echo -e "\n${RED}ERROR: contentget(): ctlength 2${NC}\n"
 		exit -1
 	fi
 }
 
 function getstream()
 {
-	contentget
-	timeupdate
-	exrefresh
 	echo '방송시간: '"$starttime"' / 현재: '"$hour"':'"$min"':'"$sec"
 	if [ "$vcheck" = 'true' ]
 	then
-		echo -e "${YLW}\n비디오 스트림 발견, 함께 다운로드 합니다\n${NC}"
-		echo -e '\n'"$title"' E'"$ep"' '"$subjects"
-		echo -e 'Audio: '"$url"'\nVideo: '"$vurl"'\n'
-		echo -e '오디오 파일: '"$filenames"'.ts\n비디오 파일: '"$filenames"'_video.ts\n'
-		youtube-dl "$url" --output "$opath"/show/"$title"/"$filenames".ts &
-		youtube-dl "$vurl" --output "$opath"/show/"$title"/"$filenames"_video.ts
-		gsretry
-	else
-		echo -e "${YLW}\n비디오 스트림 없음, 오디오만 다운로드 합니다${NC}"
-		echo -e '\n'"$title"' E'"$ep"' '"$subjects"'\n'"$url"'\n\n파일 이름: '"$filenames"'.ts\n'
-		youtube-dl "$url" --output "$opath"/show/"$title"/"$filenames".ts
-		gsretry
+		echo -e "\n${YLW}보이는 쇼 입니다${NC}"
 	fi
-	ptime=$(ffprobe -v error -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "$opath"/show/"$title"/"$filenames".ts | grep -o '^[^.]*')
-	echo -e "스트리밍 시간: $ptime초 / 스트리밍 정상 종료 기준: $ptimeth초"
-	if [ "$ptime" -lt "$ptimeth" ]
-	then
-		if [ -z "$sfailcheck" ]
-		then
-			echo -e "${RED}\n스트리밍이 정상 종료되지 않음, 1분 후 재시작${NC}"
-			sfailcheck=1
-			timer=60
-			counter
-			getstream
-		elif [ -n "$sfailcheck" ]
-		then
-			echo -e "${GRN}"'\n스트리밍이 정상 종료됨'"${NC}"
-			convert
-		else
-			echo -e "${RED}"'\nERROR: sfailcheck\n'"${NC}"
-			exit -1
-		fi
-	elif [ "$ptime" -ge "$ptimeth" ]
-	then
-		echo -e "${GRN}"'\n스트리밍이 정상 종료됨'"${NC}"
-		convert
-	else
-		echo -e "${RED}"'\nERROR: ptime/ptimeth\n'"${NC}"
-		exit -1
-	fi
-}
+	echo -e "\n$title E$ep $subjects"
+	echo -e "URL: $url\nFilename: $filenames\n"
+	#-ERROR-CHECK------------------------------------------------------
+	youtube-dl "$url" --output "$opath"/show/"$title"/"$filenames".ts \
+	& ypid="$!"
+	
+	echo -e "youtube-dl PID=${ypid}\n"
+	wait ${ypid}
+	pstatus="$?"
 
-function gsretry()
-{
-	if [ "$?" =  '1' ]
+	echo -e "\nPID: ${ypid} / Exit code: ${pstatus}"
+	#-ERROR-CHECK------------------------------------------------------
+	if [ "$pstatus" != 0 ]
 	then
 		if [ "$maxretry" = 0 ]
 		then
-			echo -e "${RED}\n다운로드 실패, 스크립트 종료\n${NC}"
+			echo -e "\n${RED}다운로드 실패, 스크립트 종료${NC}\n"
 			exit -1
 		fi
 		if [ -n "$retry" ]
@@ -226,29 +189,64 @@ function gsretry()
 		fi
 		if [ -z "$retry" ] || [ "$retry" -lt "$maxretry" ]
 		then
-			echo -e "${YLW}\n다운로드 실패, 재시도 합니다\n${NC}"
+			echo -e "\n${YLW}다운로드 실패, 재시도 합니다${NC}\n"
 			((retry++))
 		elif [ "$retry" -ge "$maxretry" ]
 		then
-			echo -e "${RED}\n다운로드 실패\n최대 재시도 횟수($maxretry회) 도달, 스크립트 종료\n${NC}"
+			echo -e "\n${RED}다운로드 실패\n최대 재시도 횟수($maxretry회) 도달, 스크립트 종료${NC}\n"
 			exit -1
 		else
-			echo -e "${RED}\nERROR: getstream(): maxretry 1\n${NC}"
+			echo -e "\n${RED}ERROR: getstream(): maxretry 1${NC}\n"
 			exit -1
 		fi
+		contentget
+		exrefresh
+		timeupdate
 		getstream
-	else
+	elif [ "$pstatus" = 0 ]
+	then
 		if [ -z "$retry" ]
 		then
 			retry=0
 		fi
-		echo -e "${GRN}\n다운로드 성공${NC}"
+		echo -e "\n${GRN}다운로드 성공${NC}"
 		echo -e "\n총 재시도 횟수: $retry"
+	else
+		echo -e "\n${RED}youtube-dl: exit code $pstatus"
+		echo -e "ERROR: gsretry()${NC}\n"
+		exit -1
 	fi
-	unset retry
-	echo -e "${GRN}\n다운로드 완료, 3초 대기${NC}"
+	unset retry ypid pstatus
+	echo -e "\n${GRN}다운로드 완료, 3초 대기${NC}"
 	timer=3
 	counter
+	ptime=$(ffprobe -v error -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "$opath"/show/"$title"/"$filenames".ts | grep -o '^[^.]*')
+	echo -e "스트리밍 시간: $ptime초 / 스트리밍 정상 종료 기준: $ptimeth초"
+	if [ "$ptime" -lt "$ptimeth" ]
+	then
+		if [ -z "$sfailcheck" ]
+		then
+			echo -e "\n${RED}스트리밍이 정상 종료되지 않음, 1분 후 재시작${NC}"
+			sfailcheck=1
+			timer=60
+			counter
+			getstream
+		elif [ -n "$sfailcheck" ]
+		then
+			echo -e "\n${GRN}스트리밍이 정상 종료됨${NC}"
+			convert
+		else
+			echo -e "\n${RED}ERROR: sfailcheck${NC}\n"
+			exit -1
+		fi
+	elif [ "$ptime" -ge "$ptimeth" ]
+	then
+		echo -e "\n${GRN}스트리밍이 정상 종료됨${NC}"
+		convert
+	else
+		echo -e "\n${RED}ERROR: ptime/ptimeth${NC}\n"
+		exit -1
+	fi
 }
 
 function convert()
@@ -268,7 +266,7 @@ function convert()
 		echo -e "${RED}"'\nERROR: : Unable to get codec info\n'"${NC}"
 		exit -1
 	fi
-	echo -e "${GRN}\nJob Finished, Code: $sreason\n${NC}"
+	echo -e "\n${GRN}Job Finished, Code: $sreason${NC}\n"
 	exit 0
 }
 
@@ -277,23 +275,22 @@ function exrefresh()
 	#showhost=$(cat "$opath"/content/"$date"_"$number".content | grep -oP '"host":\["\K[^"]+')
 	#enddate=$(cat "$opath"/content/"$date"_"$number".livestatus | grep -oP '"endDatetime":"20\K[^T]+')
 	title=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'home":{"title":{"text":"\K[^"]+')
-	url=$(cat "$opath"/content/"$date"_"$number".livestatus | grep -oP 'liveStreamUrl":"\K[^"]+')
 	vcheck=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'video":\K[^,]+')
 	if [ "$vcheck" = 'true' ]
 	then
-		vurl=$(cat "$opath"/content/"$date"_"$number".livestatus | grep -oP 'videoStreamUrl":"\K[^"]+')
+		url=$(cat "$opath"/content/"$date"_"$number".livestatus | grep -oP 'videoStreamUrl":"\K[^"]+')
+	else
+		url=$(cat "$opath"/content/"$date"_"$number".livestatus | grep -oP 'liveStreamUrl":"\K[^"]+')
 	fi
-	startdate=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'start":"20\K[^T]+')
-	starttime=$(cat "$opath"/content/"$date"_"$number".content | grep -oP 'start":"\K[^"]+' | grep -oP 'T\K[^.+]+')
+	startdate=$(cat "$opath"/content/"$date"_"$number".livestatus | grep -oP 'startDatetime":"20\K[^T]+')
+	starttime=$(cat "$opath"/content/"$date"_"$number".livestatus | grep -oP 'startDatetime":"\K[^"]+' | grep -oP 'T\K[^.+]+')
 	subject=$(cat "$opath"/content/"$date"_"$number".content | grep -oP '},"title":{"text":"\K[^"]+')
 	ep=$(cat "$opath"/content/"$date"_"$number".content | grep -oP '"count":"\K[^회"]+')
-	onair=$(cat "$opath"/content/"$date"_"$number".livestatus | grep -oP $number'","status":"\K[^"]+') # READY | ONAIR
-	filename="$date"."NAVER NOW"."$title".E"$ep"."$subjects"_"$hour$min$sec"
-	filenames=${filename//'/'/.}
+	onair=$(cat "$opath"/content/"$date"_"$number".livestatus | grep -oP $number'","status":"\K[^"]+') # READY | END | ONAIR
 	subjects=${subject//'\r\n'/}
 	startdates=${startdate//'-'/}
 	starttimes=${starttime//':'/}
-	echo -e "${YLW}"'Exports refreshed\n'"${NC}"
+	echo -e "${YLW}Exports refreshed${NC}\n"
 }
 
 function timeupdate()
@@ -304,10 +301,10 @@ function timeupdate()
 	sec=$(date +'%S')
 	stimehr=$(expr substr "$starttimes" 1 2)
 	stimemin=$(expr substr "$starttimes" 3 2)
-	#hourcheck=$(expr "$stimehr" - "$hour")
-	#mincheck=$(expr "$stimemin" - "$min")
 	timecheck=$(echo "($stimehr*60+$stimemin)-($hour*60+$min)" | bc -l)
-	echo -e "${YLW}"'Time refreshed\n'"${NC}"
+	filename="$date.NAVER NOW.$title.E$ep.${subjects}_$hour$min$sec"
+	filenames=${filename//'/'/.}
+	echo -e "${YLW}Time refreshed${NC}\n"
 }
 
 function counter()
@@ -333,17 +330,15 @@ function onairwait()
 		counter
 		echo -e 'content/livestatus 다시 불러오는 중...\n'
 		contentget
-		timeupdate
 		exrefresh
+		timeupdate
 		echo -e '방송일  : '"$startdates"' / 오늘: '"$date"
 		echo '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"
 		if [ "$vcheck" = 'true' ]
 		then
-			echo -e "\n$title E$ep $subjects"
-			echo -e "Audio: $url\nVideo: $vurl\n"
-		else
-			echo -e "\n$title E$ep $subjects\n$url\n"
+			echo -e "\n${YLW}보이는 쇼 입니다${NC}"
 		fi
+		echo -e "\n$title E$ep $subjects\n$url\n"
 		if [ "$timecheck" -ge 65 ]
 		then
 			timer=3600
@@ -366,32 +361,32 @@ function onairwait()
 				then
 					timer=1
 				else
-					echo -e "${RED}\nERROR: onairwait(): 1\n${NC}"
+					echo -e "\n${RED}ERROR: onairwait(): 1${NC}\n"
 					exit -1
 				fi
 			else
-				echo -e "${RED}\nERROR: onairwait(): 2\n${NC}"
+				echo -e "\n${RED}ERROR: onairwait(): 2${NC}\n"
 				exit -1
 			fi
 		else
-			echo -e "${RED}\nERROR: onairwait(): 3\n${NC}"
+			echo -e "\n${RED}ERROR: onairwait(): 3${NC}\n"
 			exit -1
 		fi
 		# 방송 상태 확인
-		if [ "$onair" = "READY" ]
+		if [ "$onair" = "READY" ] || [ "$onair" = "END" ]
 		then
-			echo -e "Live Status: ${YLW}$onair\n${NC}"
+			echo -e "Live Status: ${YLW}$onair${NC}\n"
 		elif [ "$onair" = "ONAIR" ]
 		then
-			echo -e "Live Status: ${GRN}$onair\n${NC}"
-			echo -e "${GRN}content/livestatus 불러오기 완료\n${NC}"
+			echo -e "Live Status: ${GRN}$onair${NC}\n"
+			echo -e "${GRN}content/livestatus 불러오기 완료${NC}\n"
 			break
 		elif [ -z "$onair" ]
 		then
-			echo -e "${YLW}\nWARNING: onairwait(): onair returned null"
-			echo -e "Retrying...\n${NC}"
+			echo -e "\n${YLW}WARNING: onairwait(): onair returned null"
+			echo -e "Retrying...${NC}\n"
 		else
-			echo -e "${RED}\nERROR: onairwait(): onair\n${NC}"
+			echo -e "\n${RED}ERROR: onairwait(): onair${NC}\n"
 			exit -1
 		fi
 	done
@@ -405,9 +400,9 @@ timeupdate
 
 if [ "$vcheck" = 'true' ]
 then
-	echo -e "${YLW}"'비디오 스트림 발견, 함께 다운로드 합니다\n'"${NC}"
+	echo -e "${YLW}비디오 스트림 발견, 함께 다운로드 합니다${NC}\n"
 else
-	echo -e "${YLW}"'비디오 스트림 없음, 오디오만 다운로드 합니다\n'"${NC}"
+	echo -e "${YLW}비디오 스트림 없음, 오디오만 다운로드 합니다${NC}\n"
 fi
 
 echo '방송일  : '"$startdates"' / 오늘: '"$date"
@@ -430,68 +425,64 @@ then
 	exrefresh
 	timeupdate
 else
-	echo -e "${RED}\nERROR: custimer\n${NC}"
+	echo -e "\n${RED}ERROR: custimer${NC}\n"
 	exit -1
 fi
 
 if [ "$force" = "1" ] && [ -n "$number" ]
 then
-	echo -e "${YLW}Force Download Enabled!\n${NC}"
+	echo -e "${YLW}Force Download Enabled!${NC}\n"
 	sreason="-f"
 	getstream
 fi
 
-if [ "$onair" = "READY" ]
+if [ "$onair" = "READY" ] || [ "$onair" = "END" ]
 then
-	echo -e "${YLW}* TEST POINT 1 *${NC}"
-	echo -e "Live Status: ${YLW}$onair\n${NC}"
+	echo -e "Live Status: ${YLW}$onair${NC}\n"
 	timer=0
 	onairwait
-	contentget
-	timeupdate
-	exrefresh
 	# 시작 시간이 됐을 경우
 	if [ "$hour$min$sec" -ge "$starttimes" ]
 	then
-		echo -e "${GRN}쇼가 시작됨\n${NC}"
+		echo -e "${GRN}쇼가 시작됨${NC}\n"
 		sreason=1
 		getstream
 	# 시작 시간이 안됐을 경우
 	elif [ "$hour$min$sec" -lt "$starttimes" ]
 	then
-		echo -e "${YLW}쇼가 아직 시작되지 않음\n${NC}"
+		echo -e "${YLW}쇼가 아직 시작되지 않음${NC}\n"
 		while :
 		do
 			echo '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"
 			echo -e '\n대기 중...('"$hour$min$sec"')'
 			sleep 1
-			timeupdate
+			contentget
 			exrefresh
+			timeupdate
 			# 시작 시간 확인
 			if [ "$hour$min$sec" -ge "$starttimes" ]
 			then
 				echo '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"
-				echo -e "${GRN}쇼가 시작됨\n${NC}"
+				echo -e "${GRN}쇼가 시작됨${NC}\n"
 				break
 			fi
 		done
 		sreason=2
 		getstream
 	else
-		echo -e "${RED}\nERROR: 1\n${NC}"
+		echo -e "\n${RED}ERROR: 1${NC}\n"
 		exit -1
 	fi
 elif [ "$onair" = "ONAIR" ]
 then
-	echo -e "${YLW}* TEST POINT 2 *${NC}"
-	echo -e "Live Status: ${GRN}$onair\n${NC}"
-	echo -e "${GRN}쇼가 시작됨\n${NC}"
+	echo -e "Live Status: ${GRN}$onair${NC}\n"
+	echo -e "${GRN}쇼가 시작됨${NC}\n"
 	sreason=3
 	getstream
 else
-	echo -e "${RED}ERROR: 2\n${NC}"
+	echo -e "${RED}ERROR: 2${NC}\n"
 	exit -1
 fi
 
-echo -e "${RED}"'\nERROR: EOF\n'"${NC}"
+echo -e "${RED}ERROR: EOF${NC}\n"
 exit -1
