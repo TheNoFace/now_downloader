@@ -165,7 +165,7 @@ function getstream()
 		echo -e "\n${YLW}보이는 쇼 입니다${NC}"
 	fi
 	echo -e "\n$title E$ep $subjects"
-	echo -e "URL: $url\nFilename: $filenames\n"
+	echo -e "${filenames}.ts\n$url\n"
 	#-ERROR-CHECK------------------------------------------------------
 	youtube-dl "$url" --output "$opath"/show/"$title"/"$filenames".ts \
 	& ypid="$!"
@@ -220,7 +220,7 @@ function getstream()
 	echo -e "\n${GRN}다운로드 완료, 3초 대기${NC}"
 	timer=3
 	counter
-	ptime=$(ffprobe -v error -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "$opath"/show/"$title"/"$filenames".ts | grep -o '^[^.]*')
+	ptime=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$opath"/show/"$title"/"$filenames".ts | grep -o '^[^.]*')
 	echo -e "스트리밍 시간: $ptime초 / 스트리밍 정상 종료 기준: $ptimeth초"
 	if [ "$ptime" -lt "$ptimeth" ]
 	then
@@ -263,7 +263,7 @@ function convert()
 		ffmpeg -i "$opath"/show/"$title"/"$filenames".ts -vn -c:a copy "$opath"/show/"$title"/"$filenames".m4a
 		echo -e '\nConvert Complete: '"$filenames"'.m4a'
 	else
-		echo -e "${RED}"'\nERROR: : Unable to get codec info\n'"${NC}"
+		echo -e "\n${RED}ERROR: : Unable to get codec info${NC}\n"
 		exit -1
 	fi
 	echo -e "\n${GRN}Job Finished, Code: $sreason${NC}\n"
