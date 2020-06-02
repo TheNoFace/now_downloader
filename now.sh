@@ -251,7 +251,7 @@ function getstream()
 
 function convert()
 {
-	codec=$(ffprobe -v error -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$opath"/show/"$title"/"$filenames".ts)
+	codec=$(ffprobe -v error -show_streams -select_streams a "$opath"/show/"$title"/"$filenames".ts | grep -oP 'codec_name=\K[^+]*')
 	if [ "$codec" = 'mp3' ]
 	then 
 		echo -e '\nCodec: MP3, Saving into mp3 file\n'
