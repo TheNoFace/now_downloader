@@ -12,8 +12,6 @@ YLW='\033[1;33m' # Warning or alert
 GRN='\033[0;32m'
 NC='\033[0m' # No Color
 
-opath=/srv/mount/ssd0/now # directory to save; USE ORIGINAL LINK, NOT SYMLINKS
-
 if [ "$#" -eq 2 ]
 then
 	if [ "$1" = "-f" ]
@@ -24,6 +22,7 @@ then
 			echo "Use -f to force download"
 			exit -1
 		else
+			echo "-SCRIPT-START---------------------------------------------------------------"
 			echo -e "\n${YLW}Force Download Enabled!${NC}"
 			echo -e 'ShowID: '"$2"'\n'
 			number="$2"
@@ -45,8 +44,33 @@ then
 	echo "Use -f to force download"
 	exit -1
 else
+	echo "-SCRIPT-START---------------------------------------------------------------"
 	echo -e '\nShowID: '"$1"'\n'
 	number="$1"
+fi
+
+if [ ! -e .opath ]
+then
+	echo "Seems like it's your first time to run this scipt"
+	echo -n "Please enter directory to save (e.g: /home/$USER/now): "
+	read opath
+	if [ ! -d ${opath} ]
+	then
+		echo -e "Output Directory: $opath"
+		echo -e "\n${RED}ERROR: Directory is not available"
+		echo -e "Are you sure that directory exists?${NC}\n"
+		exit -1
+	fi
+	echo ${opath} > .opath
+	echo
+elif [ -e .opath ]
+then
+	opath=$(cat .opath)
+	echo -e "Output Directory: ${YLW}${opath}${NC}"
+	echo -e "If you want to change directory, delete .opath file\n"
+else
+	echo -e "\n${RED}ERROR: opath${NC}\n"
+	exit -1
 fi
 
 echo -n "Maximum download retry (Default: 10): "
