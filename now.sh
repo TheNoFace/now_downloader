@@ -12,6 +12,8 @@ YLW='\033[1;33m' # Warning or alert
 GRN='\033[0;32m'
 NC='\033[0m' # No Color
 
+STMSG=("\n--SCRIPT-START------$(date +'%F %a %T')--------------------------------\n")
+
 if [ "$#" -eq 2 ]
 then
 	if [ "$1" = "-f" ]
@@ -20,9 +22,9 @@ then
 		then
 			echo "Usage: now (-f) ShowID"
 			echo "Use -f to force download"
-			exit -1
+			exit 1
 		else
-			echo "-SCRIPT-START---------------------------------------------------------------"
+			echo -e ${STMSG}
 			echo -e "\n${YLW}Force Download Enabled!${NC}"
 			echo -e 'ShowID: '"$2"'\n'
 			number="$2"
@@ -31,20 +33,20 @@ then
 	else
 		echo "Usage: now (-f) ShowID"
 		echo "Use -f to force download"
-		exit -1
+		exit 1
 	fi
 elif [ "$#" -ne 1 ]
 then
 	echo "Usage: now (-f) ShowID"
 	echo "Use -f to force download"
-	exit -1
+	exit 1
 elif [ "$1" = "-f" ]
 then
 	echo "Usage: now (-f) ShowID"
 	echo "Use -f to force download"
-	exit -1
+	exit 1
 else
-	echo "-SCRIPT-START---------------------------------------------------------------"
+	echo -e ${STMSG}
 	echo -e '\nShowID: '"$1"'\n'
 	number="$1"
 fi
@@ -59,7 +61,7 @@ then
 		echo -e "Output Directory: $opath"
 		echo -e "\n${RED}ERROR: Directory is not available"
 		echo -e "Are you sure that directory exists?${NC}\n"
-		exit -1
+		exit 1
 	fi
 	echo ${opath} > .opath
 	echo
@@ -67,10 +69,10 @@ elif [ -e .opath ]
 then
 	opath=$(cat .opath)
 	echo -e "Output Directory: ${YLW}${opath}${NC}"
-	echo -e "If you want to change directory, delete .opath file\n"
+	echo -e "If you want to change directory, delete ${YLW}$PWD/.opath${NC} file\n"
 else
 	echo -e "\n${RED}ERROR: opath${NC}\n"
-	exit -1
+	exit 1
 fi
 
 echo -n "Maximum download retry (Default: 10): "
@@ -152,10 +154,10 @@ function contentget()
 				elif [ "$ctretry" -ge "$maxretry" ]
 				then
 					echo -e "\n${RED}다운로드 실패\n최대 재시도 횟수($maxretry회) 도달, 스크립트 종료${NC}\n"
-					exit -1
+					exit 1
 				else
 					echo -e "\n${RED}ERROR: contentget(): ctretry,maxretry${NC}\n"
-					exit -1
+					exit 1
 				fi
 			elif [ "$ctlength" -ge 2500 ] && [ "$lslength" -ge 1000 ]
 			then
@@ -165,7 +167,7 @@ function contentget()
 				break
 			else
 				echo -e "\n${RED}ERROR: contentget(): ctlength 1${NC}\n"
-				exit -1
+				exit 1
 			fi
 		done
 		unset ctretry
@@ -177,7 +179,7 @@ function contentget()
 		unset ctretry
 	else
 		echo -e "\n${RED}ERROR: contentget(): ctlength 2${NC}\n"
-		exit -1
+		exit 1
 	fi
 }
 
@@ -205,7 +207,7 @@ function getstream()
 		if [ "$maxretry" = 0 ]
 		then
 			echo -e "\n${RED}다운로드 실패, 스크립트 종료${NC}\n"
-			exit -1
+			exit 1
 		fi
 		if [ -n "$retry" ]
 		then
@@ -218,10 +220,10 @@ function getstream()
 		elif [ "$retry" -ge "$maxretry" ]
 		then
 			echo -e "\n${RED}다운로드 실패\n최대 재시도 횟수($maxretry회) 도달, 스크립트 종료${NC}\n"
-			exit -1
+			exit 1
 		else
 			echo -e "\n${RED}ERROR: getstream(): maxretry 1${NC}\n"
-			exit -1
+			exit 1
 		fi
 		contentget
 		exrefresh
@@ -238,7 +240,7 @@ function getstream()
 	else
 		echo -e "\n${RED}youtube-dl: exit code $pstatus"
 		echo -e "ERROR: gsretry()${NC}\n"
-		exit -1
+		exit 1
 	fi
 	unset retry ypid pstatus
 	echo -e "\n${GRN}다운로드 완료, 3초 대기${NC}"
@@ -254,6 +256,9 @@ function getstream()
 			sfailcheck=1
 			timer=60
 			counter
+			contentget
+			exrefresh
+			timeupdate
 			getstream
 		elif [ -n "$sfailcheck" ]
 		then
@@ -261,7 +266,7 @@ function getstream()
 			convert
 		else
 			echo -e "\n${RED}ERROR: sfailcheck${NC}\n"
-			exit -1
+			exit 1
 		fi
 	elif [ "$ptime" -ge "$ptimeth" ]
 	then
@@ -269,7 +274,7 @@ function getstream()
 		convert
 	else
 		echo -e "\n${RED}ERROR: ptime/ptimeth${NC}\n"
-		exit -1
+		exit 1
 	fi
 }
 
@@ -288,7 +293,7 @@ function convert()
 		echo -e '\nConvert Complete: '"$filenames"'.m4a'
 	else
 		echo -e "\n${RED}ERROR: : Unable to get codec info${NC}\n"
-		exit -1
+		exit 1
 	fi
 	echo -e "\n${GRN}Job Finished, Code: $sreason${NC}\n"
 	exit 0
@@ -386,15 +391,15 @@ function onairwait()
 					timer=1
 				else
 					echo -e "\n${RED}ERROR: onairwait(): 1${NC}\n"
-					exit -1
+					exit 1
 				fi
 			else
 				echo -e "\n${RED}ERROR: onairwait(): 2${NC}\n"
-				exit -1
+				exit 1
 			fi
 		else
 			echo -e "\n${RED}ERROR: onairwait(): 3${NC}\n"
-			exit -1
+			exit 1
 		fi
 		# 방송 상태 확인
 		if [ "$onair" = "READY" ] || [ "$onair" = "END" ]
@@ -403,7 +408,12 @@ function onairwait()
 		elif [ "$onair" = "ONAIR" ]
 		then
 			echo -e "Live Status: ${GRN}$onair${NC}\n"
-			echo -e "${GRN}content/livestatus 불러오기 완료${NC}\n"
+			echo -e "${GRN}content/livestatus 불러오기 완료${NC}\n3초 동안 대기 후 다운로드 합니다"
+			timer=3
+			counter
+			contentget
+			exrefresh
+			timeupdate
 			break
 		elif [ -z "$onair" ]
 		then
@@ -411,7 +421,7 @@ function onairwait()
 			echo -e "Retrying...${NC}\n"
 		else
 			echo -e "\n${RED}ERROR: onairwait(): onair${NC}\n"
-			exit -1
+			exit 1
 		fi
 	done
 }
@@ -450,7 +460,7 @@ then
 	timeupdate
 else
 	echo -e "\n${RED}ERROR: custimer${NC}\n"
-	exit -1
+	exit 1
 fi
 
 if [ "$force" = "1" ] && [ -n "$number" ]
@@ -495,7 +505,7 @@ then
 		getstream
 	else
 		echo -e "\n${RED}ERROR: 1${NC}\n"
-		exit -1
+		exit 1
 	fi
 elif [ "$onair" = "ONAIR" ]
 then
@@ -505,8 +515,8 @@ then
 	getstream
 else
 	echo -e "${RED}ERROR: 2${NC}\n"
-	exit -1
+	exit 1
 fi
 
 echo -e "${RED}ERROR: EOF${NC}\n"
-exit -1
+exit 1
