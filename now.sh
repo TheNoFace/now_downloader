@@ -25,8 +25,8 @@ then
 			exit 1
 		else
 			echo -e ${STMSG}
-			echo -e "\n${YLW}Force Download Enabled!${NC}"
-			echo -e 'ShowID: '"$2"'\n'
+			echo -e "${YLW}Force Download Enabled!${NC}"
+			echo -e "ShowID: $2\n"
 			number="$2"
 			force=1
 		fi
@@ -47,7 +47,7 @@ then
 	exit 1
 else
 	echo -e ${STMSG}
-	echo -e '\nShowID: '"$1"'\n'
+	echo -e "ShowID: $1\n"
 	number="$1"
 fi
 
@@ -374,18 +374,18 @@ function onairwait()
 		# 시작 시간이 65분 미만 차이
 		elif [ "$timecheck" -lt 65 ]
 		then
-			# 시작 시간이 10분 초과 차이
+			# 시작 시간이 12분 초과 차이
 			if [ "$timecheck" -gt 12 ]
 			then
 				timer=600
-			# 시작 시간이 10분 이하 차이
+			# 시작 시간이 12분 이하 차이
 			elif [ "$timecheck" -le 12 ]
 			then
-				# 시작 시간이 2분 초과 차이
+				# 시작 시간이 3분 초과 차이
 				if [ "$timecheck" -gt 3 ]
 				then
 					timer=60
-				# 시작 시간이 2분 이하 차이
+				# 시작 시간이 3분 이하 차이
 				elif [ "$timecheck" -le 3 ]
 				then
 					timer=1
@@ -420,7 +420,8 @@ function onairwait()
 			echo -e "\n${YLW}WARNING: onairwait(): onair returned null"
 			echo -e "Retrying...${NC}\n"
 		else
-			echo -e "\n${RED}ERROR: onairwait(): onair${NC}\n"
+			echo -e "\n${RED}Unknown Live Status: $onair"
+			echo -e "ERROR: onairwait(): onair${NC}\n"
 			exit 1
 		fi
 	done
@@ -519,4 +520,4 @@ else
 fi
 
 echo -e "${RED}ERROR: EOF${NC}\n"
-exit 1
+exit 2
