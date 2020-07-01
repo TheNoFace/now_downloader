@@ -1,5 +1,18 @@
 #!/bin/bash
 
+#------------------------------------------------------------------
+#
+# Now Downloader
+#
+# Created on 2020 May 12
+# Updated on 2020 July 1
+#
+# Author: TheNoFace (thenoface303@gmail.com)
+#
+# Version 0.9
+#
+#------------------------------------------------------------------
+
 # TODO:
 # 200531-1) 방송 시각과 현재 시각 차이가 20분 이상이면 (시각차이-20)분 sleep
 # 200531-2) ERROR CHECK에 $vcheck = true일 경우 오디오/비디오 스트림 동시에 받기
@@ -338,15 +351,18 @@ function timeupdate()
 
 function counter()
 {
-	echo -e '\n총 '"$timer"'초 동안 대기합니다'
-	while [ "$timer" -gt 0 ]
-	do
-		echo -ne "$timer\033[0K"'초 남음'"\r"
-		sleep 1
-		((timer--))
-	done
+	if [ "$timer" -gt 0 ]
+	then
+		echo -e '\n총 '"$timer"'초 동안 대기합니다'
+		while [ "$timer" -gt 0 ]
+		do
+			echo -ne "$timer\033[0K"'초 남음'"\r"
+			sleep 1
+			((timer--))
+		done
+		echo -e '\n'
+	fi
 	unset timer
-	echo -e '\n'
 }
 
 function onairwait()
