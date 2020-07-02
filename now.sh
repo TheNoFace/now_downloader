@@ -9,7 +9,7 @@
 #
 # Author: TheNoFace (thenoface303@gmail.com)
 #
-# Version 1.0.0
+# Version 1.0.1
 #
 # TODO:
 # 200531-1) 방송 시각과 현재 시각 차이가 20분 이상이면 (시각차이-20)분 sleep
@@ -25,7 +25,7 @@ YLW='\033[1;33m' # Warning or alert
 GRN='\033[0;32m'
 NC='\033[0m' # No Color
 
-NDV="1.0.0"
+NDV="1.0.1"
 BANNER="\nNow Downloader v$NDV\n"
 SCRIPT_NAME=$(basename $0)
 STMSG=("\n--SCRIPT-START------------------------------------$(date +'%F %a %T')--\n")
@@ -149,11 +149,11 @@ Options:
   -h | --help                Show this help screen
   -f | --force               Start download immediately without any time checks
   -o | --opath <dir>         Overrides output path if it's been set before
-  -r | --MAXRETRY [number]   Maximum retries if download fails
+  -r | --maxretry [number]   Maximum retries if download fails
                              Default is set to 10 (times)
-  -t | --PTIMETH [seconds]   Failcheck threshold if the stream has ended abnormally
+  -t | --ptimeth [seconds]   Failcheck threshold if the stream has ended abnormally
                              Default is set to 3300 (seconds)
-  -c | --CUSTIMER [seconds]  Custom sleep timer before starting script"
+  -c | --custimer [seconds]  Custom sleep timer before starting script"
 	alert_msg "                             WARNING: Mandatory if today is not the broadcasting day"
 
 	echo "Notes:
