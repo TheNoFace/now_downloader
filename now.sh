@@ -9,7 +9,7 @@
 #
 # Author: TheNoFace (thenoface303@gmail.com)
 #
-# Version 1.0.1
+# Version 1.0.2
 #
 # TODO:
 # 200531-1) 방송 시각과 현재 시각 차이가 20분 이상이면 (시각차이-20)분 sleep
@@ -25,10 +25,10 @@ YLW='\033[1;33m' # Warning or alert
 GRN='\033[0;32m'
 NC='\033[0m' # No Color
 
-NDV="1.0.1"
+NDV="1.0.2"
 BANNER="\nNow Downloader v$NDV\n"
 SCRIPT_NAME=$(basename $0)
-STMSG=("\n--SCRIPT-START------------------------------------$(date +'%F %a %T')--\n")
+STMSG=("\n---SCRIPT-START------------------------------------------$(date +'%F %a %T')---\n")
 
 SHOW_ID=""
 MAXRETRY=""
@@ -174,10 +174,8 @@ function dir_check()
 	if [ ! -d "${OPATH}" ]
 	then
 		mkdir -p "${OPATH}" & mdpid="$!"
-		#msg "mkdir PID=${mdpid}"
 		wait ${mdpid}
 		pstatus="$?"
-		#echo -e "PID: ${mdpid} / Exit code: ${pstatus}"
 
 		if [ $pstatus != 0 ]
 		then
@@ -298,8 +296,8 @@ function contentget()
 			elif [ "$ctlength" -ge 2500 ] && [ "$lslength" -ge 1000 ]
 			then
 				info_msg "\n정상 content/livestatus 파일\n"
-				wget -O "${OPATH}"/content/"$date"_"${SHOW_ID}".content https://now.naver.com/api/nnow/v1/stream/"${SHOW_ID}"/content
-				wget -O "${OPATH}"/content/"$date"_"${SHOW_ID}".livestatus https://now.naver.com/api/nnow/v1/stream/"${SHOW_ID}"/livestatus
+				wget -O "${OPATH}/content/${d_date}_${SHOW_ID}".content https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content
+				wget -O "${OPATH}/content/${d_date}_${SHOW_ID}".livestatus https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
 				break
 			else
 				err_msg "\nERROR: contentget(): ctlength 1\n"
@@ -310,8 +308,8 @@ function contentget()
 	elif [ "$ctlength" -ge 2500 ] && [ "$lslength" -ge 1000 ]
 	then
 		info_msg "\n정상 content/livestatus 파일\n"
-		wget -O "${OPATH}"/content/"$date"_"${SHOW_ID}".content https://now.naver.com/api/nnow/v1/stream/"${SHOW_ID}"/content
-		wget -O "${OPATH}"/content/"$date"_"${SHOW_ID}".livestatus https://now.naver.com/api/nnow/v1/stream/"${SHOW_ID}"/livestatus
+		wget -O "${OPATH}/content/${d_date}_${SHOW_ID}".content https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content
+		wget -O "${OPATH}/content/${d_date}_${SHOW_ID}".livestatus https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
 		unset ctretry
 	else
 		err_msg "\nERROR: contentget(): ctlength 2\n"
@@ -326,10 +324,10 @@ function getstream()
 	then
 		alert_msg "\n보이는 쇼 입니다"
 	fi
-	echo -e "\n$title E$ep $subjects"
-	echo -e "${filenames}.ts\n$url\n"
+	echo -e "\n$title E$ep $subject"
+	echo -e "${filename}.ts\n$url\n"
 	#-ERROR-CHECK------------------------------------------------------
-	youtube-dl "$url" --output "${OPATH}"/show/"$title"/"$filenames".ts \
+	youtube-dl "$url" --output "${OPATH}/show/$title/$filename".ts \
 	& ypid="$!"
 	
 	echo -e "youtube-dl PID=${ypid}\n"
@@ -382,7 +380,7 @@ function getstream()
 	info_msg "\n다운로드 완료, 3초 대기"
 	timer=3
 	counter
-	ptime=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${OPATH}"/show/"$title"/"$filenames".ts | grep -o '^[^.]*')
+	ptime=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${OPATH}/show/$title/$filename.ts" | grep -o '^[^.]*')
 	echo -e "스트리밍 시간: $ptime초 / 스트리밍 정상 종료 기준: $PTIMETH초"
 	if [ "$ptime" -lt "$PTIMETH" ]
 	then
@@ -416,17 +414,17 @@ function getstream()
 
 function convert()
 {
-	codec=$(ffprobe -v error -show_streams -select_streams a "${OPATH}"/show/"$title"/"$filenames".ts | grep -oP 'codec_name=\K[^+]*')
+	codec=$(ffprobe -v error -show_streams -select_streams a "${OPATH}/show/$title/$filename.ts" | grep -oP 'codec_name=\K[^+]*')
 	if [ "$codec" = 'mp3' ]
 	then 
-		echo -e '\nCodec: MP3, Saving into mp3 file\n'
-		ffmpeg -i "${OPATH}"/show/"$title"/"$filenames".ts -vn -c:a copy "${OPATH}"/show/"$title"/"$filenames".mp3
-		echo -e '\nConvert Complete: '"$filenames"'.mp3'
+		msg "\nCodec: MP3, Saving into mp3 file\n"
+		ffmpeg -i "${OPATH}/show/$title/$filename.ts" -vn -c:a copy "${OPATH}/show/$title/$filename.mp3"
+		msg "\nConvert Complete: $filename.mp3"
 	elif [ "$codec" = 'aac' ]
 	then
-		echo -e '\nCodec: AAC, Saving into m4a file\n'
-		ffmpeg -i "${OPATH}"/show/"$title"/"$filenames".ts -vn -c:a copy "${OPATH}"/show/"$title"/"$filenames".m4a
-		echo -e '\nConvert Complete: '"$filenames"'.m4a'
+		msg "\nCodec: AAC, Saving into m4a file\n"
+		ffmpeg -i "${OPATH}/show/$title/$filename.ts" -vn -c:a copy "${OPATH}/show/$title/$filename.m4a"
+		msg "\nConvert Complete: $filename.m4a"
 	else
 		err_msg "\nERROR: : Unable to get codec info\n"
 		exit 1
@@ -437,38 +435,38 @@ function convert()
 
 function exrefresh()
 {
-	#showhost=$(cat "${OPATH}"/content/"$date"_"${SHOW_ID}".content | grep -oP '"host":\["\K[^"]+')
-	#enddate=$(cat "${OPATH}"/content/"$date"_"${SHOW_ID}".livestatus | grep -oP '"endDatetime":"20\K[^T]+')
-	title=$(cat "${OPATH}"/content/"$date"_"${SHOW_ID}".content | grep -oP 'home":{"title":{"text":"\K[^"]+')
-	vcheck=$(cat "${OPATH}"/content/"$date"_"${SHOW_ID}".content | grep -oP 'video":\K[^,]+')
+	#showhost=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.content" | grep -oP '"host":\["\K[^"]+')
+	#enddate=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.livestatus" | grep -oP '"endDatetime":"20\K[^T]+')
+	title=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.content" | grep -oP 'home":{"title":{"text":"\K[^"]+')
+	vcheck=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.content" | grep -oP 'video":\K[^,]+')
 	if [ "$vcheck" = 'true' ]
 	then
-		url=$(cat "${OPATH}"/content/"$date"_"${SHOW_ID}".livestatus | grep -oP 'videoStreamUrl":"\K[^"]+')
+		url=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.livestatus" | grep -oP 'videoStreamUrl":"\K[^"]+')
 	else
-		url=$(cat "${OPATH}"/content/"$date"_"${SHOW_ID}".livestatus | grep -oP 'liveStreamUrl":"\K[^"]+')
+		url=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.livestatus" | grep -oP 'liveStreamUrl":"\K[^"]+')
 	fi
-	startdate=$(cat "${OPATH}"/content/"$date"_"${SHOW_ID}".livestatus | grep -oP 'startDatetime":"20\K[^T]+')
-	starttime=$(cat "${OPATH}"/content/"$date"_"${SHOW_ID}".livestatus | grep -oP 'startDatetime":"\K[^"]+' | grep -oP 'T\K[^.+]+')
-	subject=$(cat "${OPATH}"/content/"$date"_"${SHOW_ID}".content | grep -oP '},"title":{"text":"\K[^"]+')
-	ep=$(cat "${OPATH}"/content/"$date"_"${SHOW_ID}".content | grep -oP '"count":"\K[^회"]+')
-	onair=$(cat "${OPATH}"/content/"$date"_"${SHOW_ID}".livestatus | grep -oP ${SHOW_ID}'","status":"\K[^"]+') # READY | END | ONAIR
-	subjects=${subject//'\r\n'/}
-	startdates=${startdate//'-'/}
-	starttimes=${starttime//':'/}
+	startdate=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.livestatus" | grep -oP 'startDatetime":"20\K[^T]+')
+	starttime=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.livestatus" | grep -oP 'startDatetime":"\K[^"]+' | grep -oP 'T\K[^.+]+')
+	subject=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.content" | grep -oP '},"title":{"text":"\K[^"]+')
+	ep=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.content" | grep -oP '"count":"\K[^회"]+')
+	onair=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.livestatus" | grep -oP ${SHOW_ID}'","status":"\K[^"]+') # READY | END | ONAIR
+	subject=${subject//'\r\n'/' '}
+	startdate=${startdate//'-'/}
+	starttime=${starttime//':'/}
 	alert_msg "Exports refreshed\n"
 }
 
 function timeupdate()
 {
-	date=$(date +'%y%m%d')
+	d_date=$(date +'%y%m%d')
 	hour=$(date +'%H')
 	min=$(date +'%M')
 	sec=$(date +'%S')
-	stimehr=$(expr substr "$starttimes" 1 2)
-	stimemin=$(expr substr "$starttimes" 3 2)
+	stimehr=$(expr substr "$starttime" 1 2)
+	stimemin=$(expr substr "$starttime" 3 2)
 	timecheck=$(echo "($stimehr*60+$stimemin)-($hour*60+$min)" | bc -l)
-	filename="$date.NAVER NOW.$title.E$ep.${subjects}_$hour$min$sec"
-	filenames=${filename//'/'/.}
+	filename="${d_date}.NAVER NOW.$title.E$ep.${subject}_$hour$min$sec"
+	filename=${filename//'/'/' '}
 	alert_msg "Time refreshed\n"
 }
 
@@ -500,13 +498,13 @@ function onairwait()
 		contentget
 		exrefresh
 		timeupdate
-		echo -e '방송일  : '"$startdates"' / 오늘: '"$date"
-		echo '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"
+		echo -e '방송일  : '"$startdate"' / 오늘: '"${d_date}"
+		echo '방송시간: '"$starttime"' / 현재: '"$hour$min$sec"
 		if [ "$vcheck" = 'true' ]
 		then
 			alert_msg "\n보이는 쇼 입니다"
 		fi
-		echo -e "\n$title E$ep $subjects\n$url\n"
+		echo -e "\n$title E$ep $subject\n$url\n"
 		if [ "$timecheck" -ge 65 ]
 		then
 			timer=3600
@@ -569,7 +567,7 @@ function onairwait()
 
 function main()
 {
-	date=$(date +'%y%m%d')
+	d_date=$(date +'%y%m%d')
 	contentget
 	exrefresh
 	timeupdate
@@ -581,9 +579,9 @@ function main()
 		alert_msg "비디오 스트림 없음, 오디오만 다운로드 합니다\n"
 	fi
 
-	echo "방송일  : $startdates / 오늘: $date"
-	echo -e "방송시간: $starttimes / 현재: $hour$min$sec"
-	echo -e "$title E$ep $subjects\n"
+	echo "방송일  : $startdate / 오늘: ${d_date}"
+	echo -e "방송시간: $starttime / 현재: $hour$min$sec"
+	echo -e "$title E$ep $subject\n"
 
 	if [ -n "$CUSTIMER" ]
 	then
@@ -616,27 +614,27 @@ function main()
 		timer=0
 		onairwait
 		# 시작 시간이 됐을 경우
-		if [ "$hour$min$sec" -ge "$starttimes" ]
+		if [ "$hour$min$sec" -ge "$starttime" ]
 		then
 			info_msg "쇼가 시작됨\n"
 			SREASON=1
 			getstream
 		# 시작 시간이 안됐을 경우
-		elif [ "$hour$min$sec" -lt "$starttimes" ]
+		elif [ "$hour$min$sec" -lt "$starttime" ]
 		then
 			alert_msg "쇼가 아직 시작되지 않음\n"
 			while :
 			do
-				echo '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"
+				echo '방송시간: '"$starttime"' / 현재: '"$hour$min$sec"
 				echo -e '\n대기 중...('"$hour$min$sec"')'
 				sleep 1
 				contentget
 				exrefresh
 				timeupdate
 				# 시작 시간 확인
-				if [ "$hour$min$sec" -ge "$starttimes" ]
+				if [ "$hour$min$sec" -ge "$starttime" ]
 				then
-					echo '방송시간: '"$starttimes"' / 현재: '"$hour$min$sec"
+					echo '방송시간: '"$starttime"' / 현재: '"$hour$min$sec"
 					info_msg "쇼가 시작됨\n"
 					break
 				fi
