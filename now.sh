@@ -663,7 +663,7 @@ function main()
 				
 get_parms "$@"
 script_init
-#main
+main
 
 err_msg "ERROR: EOF\n"
 exit 10
