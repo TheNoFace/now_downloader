@@ -5,11 +5,11 @@
 # Now Downloader
 #
 # Created on 2020 May 12
-# Updated on 2020 July 2
+# Updated on 2020 July 3
 #
 # Author: TheNoFace (thenoface303@gmail.com)
 #
-# Version 1.0.2
+# Version 1.0.3
 #
 # TODO:
 # 200531-1) 방송 시각과 현재 시각 차이가 20분 이상이면 (시각차이-20)분 sleep
@@ -25,17 +25,19 @@ YLW='\033[1;33m' # Warning or alert
 GRN='\033[0;32m'
 NC='\033[0m' # No Color
 
-NDV="1.0.2"
+NDV="1.0.3"
 BANNER="\nNow Downloader v$NDV\n"
 SCRIPT_NAME=$(basename $0)
 STMSG=("\n---SCRIPT-START------------------------------------------$(date +'%F %a %T')---\n")
 
 SHOW_ID=""
-MAXRETRY=""
-PTIMETH=""
-CUSTIMER=""
+FORCE=""
 OPATH_I=""
-FORCE="0"
+MAXRETRY=""
+N_RETRY=""
+PTIMETH=""
+N_PTIMETH=""
+CUSTIMER=""
 SREASON=""
 
 ### VALIDATOR
@@ -105,8 +107,12 @@ function get_parms()
 				OPATH_I="$2" ; shift ; shift ;;
 			-r|--maxretry)
 				MAXRETRY="$2" ; shift ; shift ;;
+			-dr|--dretry)
+				N_RETRY=1 ; shift ;;
 			-t|--ptimeth)
 				PTIMETH="$2" ; shift ; shift ;;
+			-dt|--dptime)
+				N_PTIMETH=1 ; shift ;;
 			-c|--custimer)
 				CUSTIMER="$2" ; shift ; shift ;;
 			*)
@@ -142,30 +148,37 @@ function print_help()
 	echo -e "Usage: $SCRIPT_NAME -i [ShowID] [options]\n"
 
 	alert_msg Required:
-	echo "  -i | --id [number]         ID of the show to download
+	echo "  -i  | --id [number]         ID of the show to download
 
 Options:
-  -v | --version             Show program name and version
-  -h | --help                Show this help screen
-  -f | --force               Start download immediately without any time checks
-  -o | --opath <dir>         Overrides output path if it's been set before
-  -r | --maxretry [number]   Maximum retries if download fails
-                             Default is set to 10 (times)
-  -t | --ptimeth [seconds]   Failcheck threshold if the stream has ended abnormally
-                             Default is set to 3300 (seconds)
-  -c | --custimer [seconds]  Custom sleep timer before starting script"
-	alert_msg "                             WARNING: Mandatory if today is not the broadcasting day"
+  -v  | --version             Show program name and version
+  -h  | --help                Show this help screen
+  -f  | --force               Start download immediately without any time checks
+  -o  | --opath <dir>         Overrides output path to check if it's been set before
+  -r  | --maxretry [number]   Maximum retries if download fails
+                              Default is set to 10 (times)
+  -dr | --dretry              Disable retries
+  -t  | --ptimeth [seconds]   Failcheck threshold if the stream has ended abnormally
+                              Default is set to 3300 (seconds)
+  -dt | --dptime              Disable failcheck threshold
+  -c  | --custimer [seconds]  Custom sleep timer before starting script"
+	alert_msg "                              WARNING: Mandatory if today is not the broadcasting day"
 
 	echo "Notes:
   - Short options should not be grouped. You must pass each parameter on its own.
+  - Disabling flags priors than setting flags
 
 Example:
-  $SCRIPT_NAME -i 495 -f -o /home/$USER/now	-r 100 -t 3000 -c 86400
+* $SCRIPT_NAME -i 495 -f -o /home/$USER/now -r 100 -t 3000 -c 86400
   - Override output directory to /home/$USER/now
   - Wait 86400 seconds (24hr) before starting this script
   - Download #495 show
   - Retries 100 times if download fails
   - Retries if total stream time is less than 3000 seconds
+* $SCRIPT_NAME -i 495 -f -dr -dt -f
+  - Do not retry download even if download fails
+  - Do not check stream duration
+  - Download #495 show immediately without checking time
 "
 }
 
@@ -193,16 +206,32 @@ function dir_check()
 function script_init()
 {
 	echo -e ${STMSG}
-	if [ "$FORCE" = "1" ]
+	if [ -n "$FORCE" ]
 	then
-		alert_msg "Force Download Enabled!\n"
+		alert_msg "Force Download Enabled!"
+	fi
+	
+	if [ "$N_RETRY" = "1" ]
+	then
+		MAXRETRY=0
+		alert_msg "Retry Disabled!"
+	fi
+
+	if [ "$N_PTIMETH" = "1" ]
+	then
+		alert_msg "Stream duration check Disabled!"
+	fi
+
+	if [ -z "$CUSTIMER" ]
+	then
+		alert_msg "Custom timer before start Disabled!"
 	fi
 
 	if [ -z ${OPATH_I} ]
 	then
 		if [ ! -e .opath ]
 		then
-			echo "Seems like it's your first time to run this scipt"
+			echo -e "\nSeems like it's your first time to run this scipt"
 			echo -n "Please enter directory to save (e.g: /home/$USER/now): "
 			read OPATH
 			OPATH=${OPATH/"~"/"/home/$USER"}
@@ -210,7 +239,7 @@ function script_init()
 		elif [ -e .opath ]
 		then
 			OPATH=$(cat .opath)
-			echo -e "Output Path: ${YLW}${OPATH}${NC}"
+			echo -e "\nOutput Path: ${YLW}${OPATH}${NC}"
 			echo -e "If you want to change output path, delete ${YLW}$PWD/.opath${NC} file or use -o option\n"
 		else
 			err_msg "\nERROR: script_init OPATH\n"
@@ -219,7 +248,7 @@ function script_init()
 	elif [ -n ${OPATH_I} ]
 	then
 		OPATH=${OPATH_I/"~"/"/home/$USER"}
-		echo -e "Output Path: ${YLW}${OPATH} (Overrided)${NC}"
+		echo -e "\nOutput Path: ${YLW}${OPATH} (Overrided)${NC}"
 		dir_check
 	fi
 
@@ -235,29 +264,37 @@ function script_init()
 	done
 	echo
 
-	if [ -z "$MAXRETRY" ]
+	if [ -z "$N_RETRY" ]
 	then
-		MAXRETRY="10"
-		alert_msg "Maximum retry set to default ($MAXRETRY)"
-	else
-		alert_msg "Maximum retry set to $MAXRETRY"
+		if [ -z "$MAXRETRY" ]
+		then
+			MAXRETRY="10"
+			alert_msg "Maximum retry set to default ($MAXRETRY times)"
+		else
+			alert_msg "Maximum retry set to $MAXRETRY times"
+		fi
 	fi
-	
-	if [ -z "$PTIMETH" ]
+
+	if [ -z "$N_PTIMETH" ]
 	then
-		PTIMETH="3300"
-		alert_msg "Failcheck threshold set to default ("$PTIMETH"s)"
-	else
-		alert_msg "Failcheck threshold set to $PTIMETH"
+		if [ -z "$PTIMETH" ]
+		then
+			PTIMETH="3300"
+			alert_msg "Failcheck threshold set to default (${PTIMETH}s)"
+		else
+			alert_msg "Failcheck threshold set to ${PTIMETH}s"
+		fi
 	fi
-	
-	if [ -z "$CUSTIMER" ]
+
+	if [ -n "$CUSTIMER" ]
 	then
-		alert_msg "Custom sleep timer is not set"
-	else
-		alert_msg "Custom sleep timer set to $CUSTIMER"
+		alert_msg "Custom sleep timer set to ${CUSTIMER}s"
 	fi
-	echo
+
+	if [ -z "$N_RETRY" ] || [ -z "$N_PTIMETH" ] || [ -n "$CUSTIMER" ]
+	then
+		echo
+	fi
 }
 
 # content: general information of show
@@ -380,35 +417,41 @@ function getstream()
 	info_msg "\n다운로드 완료, 3초 대기"
 	timer=3
 	counter
-	ptime=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${OPATH}/show/$title/$filename.ts" | grep -o '^[^.]*')
-	echo -e "스트리밍 시간: $ptime초 / 스트리밍 정상 종료 기준: $PTIMETH초"
-	if [ "$ptime" -lt "$PTIMETH" ]
+
+	if [ "$N_PTIMETH" = "1" ]
 	then
-		if [ -z "$sfailcheck" ]
+		alert_msg "스트리밍 길이를 확인하지 않습니다"
+	else
+		ptime=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${OPATH}/show/$title/$filename.ts" | grep -o '^[^.]*')
+		echo -e "스트리밍 시간: $ptime초 / 스트리밍 정상 종료 기준: $PTIMETH초"
+		if [ "$ptime" -lt "$PTIMETH" ]
 		then
-			err_msg "\n스트리밍이 정상 종료되지 않음, 1분 후 재시작"
-			sfailcheck=1
-			timer=60
-			counter
-			contentget
-			exrefresh
-			timeupdate
-			getstream
-		elif [ -n "$sfailcheck" ]
+			if [ -z "$sfailcheck" ]
+			then
+				err_msg "\n스트리밍이 정상 종료되지 않음, 1분 후 재시작"
+				sfailcheck=1
+				timer=60
+				counter
+				contentget
+				exrefresh
+				timeupdate
+				getstream
+			elif [ -n "$sfailcheck" ]
+			then
+				info_msg "\n스트리밍이 정상 종료됨"
+				convert
+			else
+				err_msg "\nERROR: sfailcheck\n"
+				exit 1
+			fi
+		elif [ "$ptime" -ge "$PTIMETH" ]
 		then
 			info_msg "\n스트리밍이 정상 종료됨"
 			convert
 		else
-			err_msg "\nERROR: sfailcheck\n"
+			err_msg "\nERROR: ptime/PTIMETH\n"
 			exit 1
 		fi
-	elif [ "$ptime" -ge "$PTIMETH" ]
-	then
-		info_msg "\n스트리밍이 정상 종료됨"
-		convert
-	else
-		err_msg "\nERROR: ptime/PTIMETH\n"
-		exit 1
 	fi
 }
 
@@ -539,7 +582,7 @@ function onairwait()
 			exit 1
 		fi
 		# 방송 상태 확인
-		if [ "$onair" = "READY" ] || [ "$onair" = "END" ]
+		if [ "$onair" != "ONAIR" ]
 		then
 			echo -e "Live Status: ${YLW}$onair${NC}\n"
 		elif [ "$onair" = "ONAIR" ]
@@ -602,13 +645,13 @@ function main()
 		exit 1
 	fi
 
-	if [ "$FORCE" = "1" ]
+	if [ -n "$FORCE" ]
 	then
 		SREASON="FORCE"
 		getstream
 	fi
 
-	if [ "$onair" = "READY" ] || [ "$onair" = "END" ]
+	if [ "$onair" != "ONAIR" ]
 	then
 		echo -e "Live Status: ${YLW}$onair${NC}\n"
 		timer=0
