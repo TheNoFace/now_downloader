@@ -17,7 +17,9 @@
 #
 #------------------------------------------------------------------
 
+# get_options -> script_init -> main
 # contentget -> exrefresh -> timeupdate
+# onairwait -> getstream -> convert
 
 # Color template: echo -e "${RED}TITLE${GRN}MESSAGE${NC}"
 RED='\033[0;31m' # Error or force exit
@@ -421,6 +423,7 @@ function getstream()
 	if [ "$N_PTIMETH" = "1" ]
 	then
 		alert_msg "스트리밍 길이를 확인하지 않습니다"
+		convert
 	else
 		ptime=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${OPATH}/show/$title/$filename.ts" | grep -o '^[^.]*')
 		echo -e "스트리밍 시간: $ptime초 / 스트리밍 정상 종료 기준: $PTIMETH초"
@@ -473,7 +476,7 @@ function convert()
 		exit 1
 	fi
 	info_msg "\nJob Finished, Code: $SREASON\n"
-	exit 0
+	exit 0 ### SCRIPT FINISH
 }
 
 function exrefresh()

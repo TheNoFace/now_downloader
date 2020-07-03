@@ -34,7 +34,7 @@ Notes:
   - Disabling flags priors than setting flags
 
 Example:
-* now.sh -i 495 -f -o /home/$USER/now -r 100 -t 3000 -c 86400
+* now.sh -i 495 -f -o /home/ubuntu/now -r 100 -t 3000 -c 86400
   - Override output directory to /home/$USER/now
   - Wait 86400 seconds (24hr) before starting this script
   - Download #495 show
