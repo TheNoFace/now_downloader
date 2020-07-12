@@ -5,13 +5,11 @@
 # Now Downloader
 #
 # Created on 2020 May 12
-# Updated on 2020 July 3
+# Updated on 2020 July 12
 #
 # Author: TheNoFace (thenoface303@gmail.com)
 #
-# Version 1.0.3
-#
-# TODO:
+## TODO:
 # 200531-1) 방송 시각과 현재 시각 차이가 20분 이상이면 (시각차이-20)분 sleep
 # 200531-2) ERROR CHECK에 $vcheck = true일 경우 오디오/비디오 스트림 동시에 받기
 #
@@ -27,13 +25,14 @@ YLW='\033[1;33m' # Warning or alert
 GRN='\033[0;32m'
 NC='\033[0m' # No Color
 
-NDV="1.0.3"
+NDV="1.1.0"
 BANNER="\nNow Downloader v$NDV\n"
 SCRIPT_NAME=$(basename $0)
 STMSG=("\n---SCRIPT-START------------------------------------------$(date +'%F %a %T')---\n")
 
 SHOW_ID=""
 FORCE=""
+KEEP=""
 OPATH_I=""
 MAXRETRY=""
 N_RETRY=""
@@ -41,6 +40,9 @@ PTIMETH=""
 N_PTIMETH=""
 CUSTIMER=""
 SREASON=""
+
+RETRY="0"
+EXRETRY="0"
 
 ### VALIDATOR
 
@@ -105,6 +107,8 @@ function get_parms()
 				SHOW_ID="$2" ; shift ; shift ;;
 			-f|--force)
 				FORCE=1 ; shift ;;
+			-k|--keep)
+				KEEP=1 ; shift ;;
 			-o|--opath)
 				OPATH_I="$2" ; shift ; shift ;;
 			-r|--maxretry)
@@ -156,6 +160,7 @@ Options:
   -v  | --version             Show program name and version
   -h  | --help                Show this help screen
   -f  | --force               Start download immediately without any time checks
+  -k  | --keep                Do not delete original audio stream(.ts) file after download finishes
   -o  | --opath <dir>         Overrides output path to check if it's been set before
   -r  | --maxretry [number]   Maximum retries if download fails
                               Default is set to 10 (times)
@@ -177,10 +182,11 @@ Example:
   - Download #495 show
   - Retries 100 times if download fails
   - Retries if total stream time is less than 3000 seconds
-* $SCRIPT_NAME -i 495 -f -dr -dt -f
+* $SCRIPT_NAME -i 495 -f -dr -dt -f -k
   - Do not retry download even if download fails
   - Do not check stream duration
   - Download #495 show immediately without checking time
+  - Do not delete original audio stream file after download finishes
 "
 }
 
@@ -213,20 +219,20 @@ function script_init()
 		alert_msg "Force Download Enabled!"
 	fi
 	
-	if [ "$N_RETRY" = "1" ]
+	if [ -n "$N_RETRY" ]
 	then
 		MAXRETRY=0
 		alert_msg "Retry Disabled!"
 	fi
 
-	if [ "$N_PTIMETH" = "1" ]
+	if [ -n "$N_PTIMETH" ]
 	then
 		alert_msg "Stream duration check Disabled!"
 	fi
 
 	if [ -z "$CUSTIMER" ]
 	then
-		alert_msg "Custom timer before start Disabled!"
+		alert_msg "Custom timer before start is not set!"
 	fi
 
 	if [ -z ${OPATH_I} ]
@@ -295,7 +301,7 @@ function script_init()
 
 	if [ -z "$N_RETRY" ] || [ -z "$N_PTIMETH" ] || [ -n "$CUSTIMER" ]
 	then
-		echo
+		echo # For better logging
 	fi
 }
 
@@ -313,8 +319,7 @@ function contentget()
 		while :
 		do
 			((ctretry++))
-			timer=1
-			counter
+			counter 1
 			echo -e "재시도 횟수: $ctretry / 최대 재시도 횟수: $MAXRETRY\n"
 			ctlength=$(curl --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content | grep -oP 'content-length: \K[0-9]*')
 			lslength=$(curl --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus | grep -oP 'content-length: \K[0-9]*')
@@ -343,22 +348,27 @@ function contentget()
 				exit 1
 			fi
 		done
-		unset ctretry
 	elif [ "$ctlength" -ge 2500 ] && [ "$lslength" -ge 1000 ]
 	then
 		info_msg "\n정상 content/livestatus 파일\n"
 		wget -O "${OPATH}/content/${d_date}_${SHOW_ID}".content https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content
 		wget -O "${OPATH}/content/${d_date}_${SHOW_ID}".livestatus https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
-		unset ctretry
 	else
 		err_msg "\nERROR: contentget(): ctlength 2\n"
 		exit 1
 	fi
+	unset ctretry
+}
+
+function content_backup()
+{
+	mv "${OPATH}/content/${d_date}_${SHOW_ID}.content" "${OPATH}/content/${d_date}_${SHOW_ID}.content.bak"
+	mv "${OPATH}/content/${d_date}_${SHOW_ID}.livestatus" "${OPATH}/content/${d_date}_${SHOW_ID}.livestatus.bak"
 }
 
 function getstream()
 {
-	echo '방송시간: '"$starttime"' / 현재: '"$hour"':'"$min"':'"$sec"
+	echo "방송시간: $starttime / 현재: $hour$min$sec"
 	if [ "$vcheck" = 'true' ]
 	then
 		alert_msg "\n보이는 쇼 입니다"
@@ -377,25 +387,25 @@ function getstream()
 	#-ERROR-CHECK------------------------------------------------------
 	if [ "$pstatus" != 0 ]
 	then
-		if [ "$MAXRETRY" = 0 ]
+		if [ "$MAXRETRY" = "0" ]
 		then
-			err_msg "\n다운로드 실패, 스크립트 종료\n"
+			err_msg "\ngetstream(): 다운로드 실패, 스크립트 종료\n"
 			exit 1
 		fi
-		if [ -n "$retry" ]
+		if [ "$RETRY" != "0" ]
 		then
-			echo -e "\n재시도 횟수: $retry / 최대 재시도 횟수: $MAXRETRY"
+			echo -e "\n재시도 횟수: $RETRY / 최대 재시도 횟수: $MAXRETRY"
 		fi
-		if [ -z "$retry" ] || [ "$retry" -lt "$MAXRETRY" ]
+		if [ -z "$RETRY" ] || [ "$RETRY" -lt "$MAXRETRY" ]
 		then
 			alert_msg "\n다운로드 실패, 재시도 합니다\n"
-			((retry++))
-		elif [ "$retry" -ge "$MAXRETRY" ]
+			((RETRY++))
+		elif [ "$RETRY" -ge "$MAXRETRY" ]
 		then
-			err_msg "\n다운로드 실패\n최대 재시도 횟수($MAXRETRY회) 도달, 스크립트 종료\n"
+			err_msg "\ngetstream(): 다운로드 실패\n최대 재시도 횟수($MAXRETRY회) 도달, 스크립트 종료\n"
 			exit 1
 		else
-			err_msg "\nERROR: getstream(): MAXRETRY 1\n"
+			err_msg "\nERROR: getstream(): MAXRETRY\n"
 			exit 1
 		fi
 		contentget
@@ -404,23 +414,22 @@ function getstream()
 		getstream
 	elif [ "$pstatus" = 0 ]
 	then
-		if [ -z "$retry" ]
+		if [ -z "$RETRY" ]
 		then
-			retry=0
+			RETRY=0
 		fi
 		info_msg "\n다운로드 성공"
-		echo -e "\n총 재시도 횟수: $retry"
+		echo -e "\n총 재시도 횟수: $RETRY"
 	else
 		err_msg "\nyoutube-dl: exit code $pstatus"
 		err_msg "ERROR: gsretry()\n"
 		exit 1
 	fi
-	unset retry ypid pstatus
+	unset RETRY ypid pstatus
 	info_msg "\n다운로드 완료, 3초 대기"
-	timer=3
-	counter
+	counter 3
 
-	if [ "$N_PTIMETH" = "1" ]
+	if [ -n "$N_PTIMETH" ]
 	then
 		alert_msg "스트리밍 길이를 확인하지 않습니다"
 		convert
@@ -433,8 +442,7 @@ function getstream()
 			then
 				err_msg "\n스트리밍이 정상 종료되지 않음, 1분 후 재시작"
 				sfailcheck=1
-				timer=60
-				counter
+				counter 60
 				contentget
 				exrefresh
 				timeupdate
@@ -460,6 +468,10 @@ function getstream()
 
 function convert()
 {
+	if [ "$vcheck" = 'true' ]
+	then
+		alert_msg "\n보이는 쇼 입니다\n"
+	fi
 	codec=$(ffprobe -v error -show_streams -select_streams a "${OPATH}/show/$title/$filename.ts" | grep -oP 'codec_name=\K[^+]*')
 	if [ "$codec" = 'mp3' ]
 	then 
@@ -472,8 +484,13 @@ function convert()
 		ffmpeg -i "${OPATH}/show/$title/$filename.ts" -vn -c:a copy "${OPATH}/show/$title/$filename.m4a"
 		msg "\nConvert Complete: $filename.m4a"
 	else
-		err_msg "\nERROR: : Unable to get codec info\n"
+		err_msg "\nERROR: : Unidentified Codec ($codec)"
 		exit 1
+	fi
+	if [ "$vcheck" != 'true' ] && [ -z "$KEEP" ]
+	then
+		cp "${OPATH}/show/$title/$filename.ts" "${OPATH}/show/$title/$filename_DEL.ts" # TEST
+		rm "${OPATH}/show/$title/$filename.ts"
 	fi
 	info_msg "\nJob Finished, Code: $SREASON\n"
 	exit 0 ### SCRIPT FINISH
@@ -496,10 +513,45 @@ function exrefresh()
 	subject=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.content" | grep -oP '},"title":{"text":"\K[^"]+')
 	ep=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.content" | grep -oP '"count":"\K[^회"]+')
 	onair=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.livestatus" | grep -oP ${SHOW_ID}'","status":"\K[^"]+') # READY | END | ONAIR
+
 	subject=${subject//'\r\n'/' '}
 	startdate=${startdate//'-'/}
 	starttime=${starttime//':'/}
-	alert_msg "Exports refreshed\n"
+
+	if [ -z "$url" ] || [ -z "$title" ] || [ -z "$startdate" ] || [ -z "$starttime" ]
+	then
+		if [ "$MAXRETRY" = "0" ]
+		then
+			err_msg "\nexrefresh(): 정보 업데이트 실패, 스크립트 종료\n"
+			content_backup
+			exit 1
+		fi
+		if [ "$EXRETRY" != "0" ]
+		then
+			echo -e "\n재시도 횟수: $EXRETRY / 최대 재시도 횟수: $MAXRETRY"
+		fi
+		if [ -z "$EXRETRY" ] || [ "$EXRETRY" -lt "$MAXRETRY" ]
+		then
+			alert_msg "\n정보 업데이트 실패, 재시도 합니다\n"
+			((EXRETRY++))
+		elif [ "$EXRETRY" -ge "$MAXRETRY" ]
+		then
+			err_msg "\nexrefresh(): 정보 업데이트 실패\n최대 재시도 횟수($MAXRETRY회) 도달, 스크립트 종료\n"
+			content_backup
+			exit 1
+		else
+			err_msg "\nERROR: exrefresh(): EXRETRY\n"
+			content_backup
+			exit 1
+		fi
+		error_msg "Invalid URL/Title/STARTDATE/STARTTIME"
+		msg "\nSTARTDATE: $startdate\nSTARTTIME: $starttime\nTITLE:$title\nURL:$url\n"
+		msg "Retrying...\n"
+		contentget
+		exrefresh
+	fi
+	alert_msg "Show Info variables refreshed\n"
+	unset EXRETRY
 }
 
 function timeupdate()
@@ -511,35 +563,52 @@ function timeupdate()
 	stimehr=$(expr substr "$starttime" 1 2)
 	stimemin=$(expr substr "$starttime" 3 2)
 	timecheck=$(echo "($stimehr*60+$stimemin)-($hour*60+$min)" | bc -l)
-	filename="${d_date}.NAVER NOW.$title.E$ep.${subject}_$hour$min$sec"
+	if [ "$vcheck" = 'true' ]
+	then
+		filename="${d_date}.NAVER NOW.$title.E$ep.${subject}_VID_$hour$min$sec"
+	else
+		filename="${d_date}.NAVER NOW.$title.E$ep.${subject}_$hour$min$sec"
+	fi
 	filename=${filename//'/'/' '}
-	alert_msg "Time refreshed\n"
+	alert_msg "Time variables refreshed\n"
 }
 
 function counter()
 {
-	if [ "$timer" -gt 0 ]
+	TIMER=$1
+	if [ "$TIMER" = 0 ]
 	then
-		echo -e '\n총 '"$timer"'초 동안 대기합니다'
-		while [ "$timer" -gt 0 ]
+		echo
+	elif [ "$TIMER" -gt 0 ]
+	then
+		msg "\n총 $TIMER초 동안 대기합니다"
+		while [ "$TIMER" -gt 0 ]
 		do
-			echo -ne "$timer\033[0K"'초 남음'"\r"
+			echo -ne "$TIMER\033[0K초 남음\r"
 			sleep 1
-			((timer--))
+			((TIMER--))
 		done
 		echo -e '\n'
 	fi
-	unset timer
+	unset TIMER
 }
 
 function onairwait()
 {
+	W_TIMER=0
 	while :
 	do
 		echo -e '방송이 시작되지 않았습니다\n'
 		timeupdate	
 		echo -e 'Time difference: '"$timecheck"' min'
-		counter
+
+		if [ "$timecheck" -le -15 ]
+		then
+			err_msg "\nERROR: 시작시간과 15분 이상 차이 발생\n금일 방송 유무를 확인해주세요\n"
+			exit 1
+		fi
+
+		counter "$W_TIMER"
 		echo -e 'content/livestatus 다시 불러오는 중...\n'
 		contentget
 		exrefresh
@@ -553,25 +622,25 @@ function onairwait()
 		echo -e "\n$title E$ep $subject\n$url\n"
 		if [ "$timecheck" -ge 65 ]
 		then
-			timer=3600
+			W_TIMER=3600
 		# 시작 시간이 65분 미만 차이
 		elif [ "$timecheck" -lt 65 ]
 		then
 			# 시작 시간이 12분 초과 차이
 			if [ "$timecheck" -gt 12 ]
 			then
-				timer=600
+				W_TIMER=600
 			# 시작 시간이 12분 이하 차이
 			elif [ "$timecheck" -le 12 ]
 			then
 				# 시작 시간이 3분 초과 차이
 				if [ "$timecheck" -gt 3 ]
 				then
-					timer=60
+					W_TIMER=60
 				# 시작 시간이 3분 이하 차이
 				elif [ "$timecheck" -le 3 ]
 				then
-					timer=1
+					W_TIMER=1
 				else
 					err_msg "\nERROR: onairwait(): 1\n"
 					exit 1
@@ -593,8 +662,7 @@ function onairwait()
 			echo -e "Live Status: ${GRN}$onair${NC}\n"
 			info_msg "content/livestatus 불러오기 완료\n"
 			msg "3초 동안 대기 후 다운로드 합니다"
-			timer=3
-			counter
+			counter 3
 			contentget
 			exrefresh
 			timeupdate
@@ -632,8 +700,7 @@ function main()
 	if [ -n "$CUSTIMER" ]
 	then
 		alert_msg "사용자가 설정한 시작 대기 타이머가 존재합니다 ($CUSTIMER초)"
-		timer=$CUSTIMER
-		counter
+		counter $CUSTIMER
 		contentget
 		exrefresh
 		timeupdate
@@ -657,7 +724,6 @@ function main()
 	if [ "$onair" != "ONAIR" ]
 	then
 		echo -e "Live Status: ${YLW}$onair${NC}\n"
-		timer=0
 		onairwait
 		# 시작 시간이 됐을 경우
 		if [ "$hour$min$sec" -ge "$starttime" ]
