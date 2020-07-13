@@ -25,7 +25,7 @@ YLW='\033[1;33m' # Warning or alert
 GRN='\033[0;32m'
 NC='\033[0m' # No Color
 
-NDV="1.1.1"
+NDV="1.1.2"
 BANNER="\nNow Downloader v$NDV\n"
 SCRIPT_NAME=$(basename $0)
 STMSG=("\n---SCRIPT-START------------------------------------------$(date +'%F %a %T')---\n")
@@ -314,8 +314,8 @@ function script_init()
 # livestatus: audio/video stream information of show
 function contentget()
 {
-	ctlength=$(curl --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content | grep -oP 'content-length: \K[0-9]*')
-	lslength=$(curl --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus | grep -oP 'content-length: \K[0-9]*')
+	ctlength=$(curl --retry ${MAXRETRY} --retry-connrefused --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content | grep -oP 'content-length: \K[0-9]*')
+	lslength=$(curl --retry ${MAXRETRY} --retry-connrefused --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus | grep -oP 'content-length: \K[0-9]*')
 	msg "\nctlength: $ctlength / lslength: $lslength"
 	if [ "$ctlength" -lt 2500 ] && [ "$lslength" -lt 1000 ]
 	then
@@ -326,8 +326,8 @@ function contentget()
 			((ctretry++))
 			counter 1
 			echo -e "재시도 횟수: $ctretry / 최대 재시도 횟수: $MAXRETRY\n"
-			ctlength=$(curl --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content | grep -oP 'content-length: \K[0-9]*')
-			lslength=$(curl --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus | grep -oP 'content-length: \K[0-9]*')
+			ctlength=$(curl --retry ${MAXRETRY} --retry-connrefused --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content | grep -oP 'content-length: \K[0-9]*')
+			lslength=$(curl --retry ${MAXRETRY} --retry-connrefused --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus | grep -oP 'content-length: \K[0-9]*')
 			echo -e "\nctlength: $ctlength / lslength: $lslength"
 			if [ "$ctlength" -lt 2500 ] && [ "$lslength" -lt 1000 ]
 			then
@@ -494,11 +494,19 @@ function convert()
 	fi
 	if [ "$vcheck" != 'true' ] && [ -z "$KEEP" ]
 	then
-		cp "${OPATH}/show/$title/${FILENAME}.ts" "${OPATH}/show/$title/${FILENAME}_DEL.ts" # TEST
 		rm "${OPATH}/show/$title/${FILENAME}.ts"
 	fi
 	info_msg "\nJob Finished, Code: $SREASON\n"
 	exit 0 ### SCRIPT FINISH
+}
+
+function renamer()
+{
+	str=$1
+	str=${str//'"'/''}
+	str=${str//'\r\n'/' '}
+	str=${str//'\'/''}
+	export $2="$str"
 }
 
 function exrefresh()
@@ -515,11 +523,11 @@ function exrefresh()
 	fi
 	startdate=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.livestatus" | grep -oP 'startDatetime":"20\K[^T]+')
 	starttime=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.livestatus" | grep -oP 'startDatetime":"\K[^"]+' | grep -oP 'T\K[^.+]+')
-	subject=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.content" | grep -oP '},"title":{"text":"\K[^"]+')
+	subject=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.content" | jq '.contentList[].title.text')
 	ep=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.content" | grep -oP '"count":"\K[^회"]+')
 	onair=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.livestatus" | grep -oP ${SHOW_ID}'","status":"\K[^"]+') # READY | END | ONAIR
 
-	subject=${subject//'\r\n'/' '}
+	renamer "$subject" subject
 	startdate=${startdate//'-'/}
 	starttime=${starttime//':'/}
 
