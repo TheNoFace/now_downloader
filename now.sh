@@ -5,11 +5,11 @@
 # Now Downloader
 #
 # Created on 2020 May 12
-# Updated on 2020 July 12
+# Updated on 2020 July 13
 #
 # Author: TheNoFace (thenoface303@gmail.com)
 #
-## TODO:
+# TODO:
 # 200531-1) 방송 시각과 현재 시각 차이가 20분 이상이면 (시각차이-20)분 sleep
 # 200531-2) ERROR CHECK에 $vcheck = true일 경우 오디오/비디오 스트림 동시에 받기
 #
@@ -25,7 +25,7 @@ YLW='\033[1;33m' # Warning or alert
 GRN='\033[0;32m'
 NC='\033[0m' # No Color
 
-NDV="1.1.0"
+NDV="1.1.1"
 BANNER="\nNow Downloader v$NDV\n"
 SCRIPT_NAME=$(basename $0)
 STMSG=("\n---SCRIPT-START------------------------------------------$(date +'%F %a %T')---\n")
@@ -216,23 +216,28 @@ function script_init()
 	echo -e ${STMSG}
 	if [ -n "$FORCE" ]
 	then
-		alert_msg "Force Download Enabled!"
+		alert_msg "Force Download Enabled"
 	fi
-	
+
+	if [ -n "$KEEP" ]
+	then
+		alert_msg "Keep original audio stream file after download has finished"
+	fi
+
 	if [ -n "$N_RETRY" ]
 	then
 		MAXRETRY=0
-		alert_msg "Retry Disabled!"
+		alert_msg "Retry Disabled"
 	fi
 
 	if [ -n "$N_PTIMETH" ]
 	then
-		alert_msg "Stream duration check Disabled!"
+		alert_msg "Stream duration check Disabled"
 	fi
 
 	if [ -z "$CUSTIMER" ]
 	then
-		alert_msg "Custom timer before start is not set!"
+		alert_msg "Custom timer before start is not set"
 	fi
 
 	if [ -z ${OPATH_I} ]
@@ -374,9 +379,9 @@ function getstream()
 		alert_msg "\n보이는 쇼 입니다"
 	fi
 	echo -e "\n$title E$ep $subject"
-	echo -e "${filename}.ts\n$url\n"
+	echo -e "${FILENAME}.ts\n$url\n"
 	#-ERROR-CHECK------------------------------------------------------
-	youtube-dl "$url" --output "${OPATH}/show/$title/$filename".ts \
+	youtube-dl "$url" --output "${OPATH}/show/$title/${FILENAME}".ts \
 	& ypid="$!"
 	
 	echo -e "youtube-dl PID=${ypid}\n"
@@ -434,7 +439,7 @@ function getstream()
 		alert_msg "스트리밍 길이를 확인하지 않습니다"
 		convert
 	else
-		ptime=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${OPATH}/show/$title/$filename.ts" | grep -o '^[^.]*')
+		ptime=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${OPATH}/show/$title/${FILENAME}.ts" | grep -o '^[^.]*')
 		echo -e "스트리밍 시간: $ptime초 / 스트리밍 정상 종료 기준: $PTIMETH초"
 		if [ "$ptime" -lt "$PTIMETH" ]
 		then
@@ -472,25 +477,25 @@ function convert()
 	then
 		alert_msg "\n보이는 쇼 입니다\n"
 	fi
-	codec=$(ffprobe -v error -show_streams -select_streams a "${OPATH}/show/$title/$filename.ts" | grep -oP 'codec_name=\K[^+]*')
+	codec=$(ffprobe -v error -show_streams -select_streams a "${OPATH}/show/$title/${FILENAME}.ts" | grep -oP 'codec_name=\K[^+]*')
 	if [ "$codec" = 'mp3' ]
 	then 
 		msg "\nCodec: MP3, Saving into mp3 file\n"
-		ffmpeg -i "${OPATH}/show/$title/$filename.ts" -vn -c:a copy "${OPATH}/show/$title/$filename.mp3"
-		msg "\nConvert Complete: $filename.mp3"
+		ffmpeg -i "${OPATH}/show/$title/${FILENAME}.ts" -vn -c:a copy "${OPATH}/show/$title/${FILENAME}.mp3"
+		msg "\nConvert Complete: ${FILENAME}.mp3"
 	elif [ "$codec" = 'aac' ]
 	then
 		msg "\nCodec: AAC, Saving into m4a file\n"
-		ffmpeg -i "${OPATH}/show/$title/$filename.ts" -vn -c:a copy "${OPATH}/show/$title/$filename.m4a"
-		msg "\nConvert Complete: $filename.m4a"
+		ffmpeg -i "${OPATH}/show/$title/${FILENAME}.ts" -vn -c:a copy "${OPATH}/show/$title/${FILENAME}.m4a"
+		msg "\nConvert Complete: ${FILENAME}.m4a"
 	else
 		err_msg "\nERROR: : Unidentified Codec ($codec)"
 		exit 1
 	fi
 	if [ "$vcheck" != 'true' ] && [ -z "$KEEP" ]
 	then
-		cp "${OPATH}/show/$title/$filename.ts" "${OPATH}/show/$title/$filename_DEL.ts" # TEST
-		rm "${OPATH}/show/$title/$filename.ts"
+		cp "${OPATH}/show/$title/${FILENAME}.ts" "${OPATH}/show/$title/${FILENAME}_DEL.ts" # TEST
+		rm "${OPATH}/show/$title/${FILENAME}.ts"
 	fi
 	info_msg "\nJob Finished, Code: $SREASON\n"
 	exit 0 ### SCRIPT FINISH
@@ -565,11 +570,11 @@ function timeupdate()
 	timecheck=$(echo "($stimehr*60+$stimemin)-($hour*60+$min)" | bc -l)
 	if [ "$vcheck" = 'true' ]
 	then
-		filename="${d_date}.NAVER NOW.$title.E$ep.${subject}_VID_$hour$min$sec"
+		FILENAME="${d_date}.NAVER NOW.$title.E$ep.${subject}_VID_$hour$min$sec"
 	else
-		filename="${d_date}.NAVER NOW.$title.E$ep.${subject}_$hour$min$sec"
+		FILENAME="${d_date}.NAVER NOW.$title.E$ep.${subject}_$hour$min$sec"
 	fi
-	filename=${filename//'/'/' '}
+	FILENAME=${FILENAME//'/'/' '}
 	alert_msg "Time variables refreshed\n"
 }
 
