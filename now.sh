@@ -5,7 +5,7 @@
 # Now Downloader
 #
 # Created on 2020 May 12
-# Updated on 2020 July 13
+# Updated on 2020 July 16
 #
 # Author: TheNoFace (thenoface303@gmail.com)
 #
@@ -25,7 +25,7 @@ YLW='\033[1;33m' # Warning or alert
 GRN='\033[0;32m'
 NC='\033[0m' # No Color
 
-NDV="1.1.2"
+NDV="1.1.3"
 BANNER="\nNow Downloader v$NDV\n"
 SCRIPT_NAME=$(basename $0)
 STMSG=("\n---SCRIPT-START------------------------------------------$(date +'%F %a %T')---\n")
@@ -511,8 +511,7 @@ function renamer()
 
 function exrefresh()
 {
-	#showhost=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.content" | grep -oP '"host":\["\K[^"]+')
-	#enddate=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.livestatus" | grep -oP '"endDatetime":"20\K[^T]+')
+	showhost=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.content" | grep -oP '호스트: \K[^\\r]+')
 	title=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.content" | grep -oP 'home":{"title":{"text":"\K[^"]+')
 	vcheck=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.content" | grep -oP 'video":\K[^,]+')
 	if [ "$vcheck" = 'true' ]
@@ -523,9 +522,15 @@ function exrefresh()
 	fi
 	startdate=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.livestatus" | grep -oP 'startDatetime":"20\K[^T]+')
 	starttime=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.livestatus" | grep -oP 'startDatetime":"\K[^"]+' | grep -oP 'T\K[^.+]+')
-	subject=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.content" | jq '.contentList[].title.text')
+	subject=$(jq '.contentList[].title.text' "${OPATH}/content/${d_date}_${SHOW_ID}.content")
+	des=$(jq '.contentList[].description.text' "${OPATH}/content/${d_date}_${SHOW_ID}.content")
 	ep=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.content" | grep -oP '"count":"\K[^회"]+')
 	onair=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.livestatus" | grep -oP ${SHOW_ID}'","status":"\K[^"]+') # READY | END | ONAIR
+	
+	if [ -d "${OPATH}/show/$title" ]
+	then
+		echo -e "Host: $showhost\n\nTitle:\n$subject\n\nDescription:\n$des" > "${OPATH}/show/$title/${d_date}_${showhost}_Info.txt"
+	fi
 
 	renamer "$subject" subject
 	startdate=${startdate//'-'/}
@@ -698,6 +703,11 @@ function main()
 	contentget
 	exrefresh
 	timeupdate
+
+	if [ ! -d "${OPATH}/show/$title" ]
+	then
+		mkdir -p "${OPATH}/show/$title"
+	fi
 
 	if [ "$vcheck" = 'true' ]
 	then
