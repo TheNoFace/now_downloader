@@ -5,7 +5,7 @@
 # Now Downloader
 #
 # Created on 2020 May 12
-# Updated on 2020 July 16
+# Updated on 2020 July 22
 #
 # Author: TheNoFace (thenoface303@gmail.com)
 #
@@ -381,7 +381,7 @@ function getstream()
 	echo -e "\n$title E$ep $subject"
 	echo -e "${FILENAME}.ts\n$url\n"
 	#-ERROR-CHECK------------------------------------------------------
-	youtube-dl "$url" --output "${OPATH}/show/$title/${FILENAME}".ts \
+	youtube-dl --hls-use-mpegts "$url" --output "${OPATH}/show/$title/${FILENAME}.ts" \
 	& ypid="$!"
 	
 	echo -e "youtube-dl PID=${ypid}\n"
@@ -489,7 +489,7 @@ function convert()
 		ffmpeg -i "${OPATH}/show/$title/${FILENAME}.ts" -vn -c:a copy "${OPATH}/show/$title/${FILENAME}.m4a"
 		msg "\nConvert Complete: ${FILENAME}.m4a"
 	else
-		err_msg "\nERROR: : Unidentified Codec ($codec)"
+		err_msg "\nERROR: Unidentified Codec ($codec)"
 		exit 1
 	fi
 	if [ "$vcheck" != 'true' ] && [ -z "$KEEP" ]
@@ -511,6 +511,7 @@ function renamer()
 
 function exrefresh()
 {
+	unset url title startdate starttime
 	showhost=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.content" | grep -oP '호스트: \K[^\\r]+')
 	title=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.content" | grep -oP 'home":{"title":{"text":"\K[^"]+')
 	vcheck=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.content" | grep -oP 'video":\K[^,]+')
