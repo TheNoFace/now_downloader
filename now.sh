@@ -25,10 +25,13 @@ YLW='\033[1;33m' # Warning or alert
 GRN='\033[0;32m'
 NC='\033[0m' # No Color
 
-NDV="1.1.3"
+NDV="1.1.4"
 BANNER="\nNow Downloader v$NDV\n"
 SCRIPT_NAME=$(basename $0)
-STMSG=("\n---SCRIPT-START------------------------------------------$(date +'%F %a %T')---\n")
+STMSG=("\n---SCRIPT-START------------------------------------------$(date +'%F %a %T')---")
+
+P_LIST=(bc curl jq youtube-dl ffmpeg)
+P_LIST_E=0
 
 SHOW_ID=""
 FORCE=""
@@ -213,7 +216,29 @@ function dir_check()
 
 function script_init()
 {
-	echo -e ${STMSG}
+	for l in ${P_LIST[@]}
+	{
+		P=$(command -v $l)
+		if [ -z $P ]
+		then
+			NFOUND=(${NFOUND[@]} $l)
+			P_LIST_E=1
+		fi
+	}
+
+	if [ $P_LIST_E == 1 ]
+	then
+		print_banner
+		array=${NFOUND[@]}
+		err_msg "Couldn't find follow package(s): $array"
+		err_msg "Please install required package(s)\n"
+		exit 1
+	else
+		echo -e ${STMSG}
+		print_banner
+		info_msg "Package check OK!\n"
+	fi
+
 	if [ -n "$FORCE" ]
 	then
 		alert_msg "Force Download Enabled"
