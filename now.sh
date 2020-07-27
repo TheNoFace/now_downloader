@@ -5,7 +5,7 @@
 # Now Downloader
 #
 # Created on 2020 May 12
-# Updated on 2020 July 22
+# Updated on 2020 July 27
 #
 # Author: TheNoFace (thenoface303@gmail.com)
 #
@@ -26,9 +26,9 @@ GRN='\033[0;32m'
 NC='\033[0m' # No Color
 
 NDV="1.1.4"
-BANNER="\nNow Downloader v$NDV\n"
+BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
-STMSG=("\n---SCRIPT-START------------------------------------------$(date +'%F %a %T')---")
+STMSG=("\n---$BANNER---------------------------------------$(date +'%F %a %T')---")
 
 P_LIST=(bc curl jq youtube-dl ffmpeg)
 P_LIST_E=0
@@ -148,7 +148,7 @@ function check_invalid_parms()
 
 function print_banner()
 {
-	info_msg "$BANNER"
+	info_msg "\n$BANNER\n"
 }
 
 function print_help()
@@ -235,8 +235,7 @@ function script_init()
 		exit 1
 	else
 		echo -e ${STMSG}
-		print_banner
-		info_msg "Package check OK!\n"
+		info_msg "\nPackage check OK!\n"
 	fi
 
 	if [ -n "$FORCE" ]
