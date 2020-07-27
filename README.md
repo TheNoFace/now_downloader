@@ -10,7 +10,7 @@ Current version: 1.1.4 (20200727)
 - youtube-dl
 - ffmpeg
 
-### Usage
+### How to use
 ```
 now.sh -i [ShowID] [options]
 
@@ -25,7 +25,7 @@ Options:
   -o  | --opath <dir>         Overrides output path to check if it's been set before
   -r  | --maxretry [number]   Maximum retries if download fails
                               Default is set to 10 (times)
-  -dr | --dretry              Disable retries
+  -dr | --dretry              Disable retries (same as -r 0)
   -t  | --ptimeth [seconds]   Failcheck threshold if the stream has ended abnormally
                               Default is set to 3300 (seconds)
   -dt | --dptime              Disable failcheck threshold
@@ -36,13 +36,13 @@ Notes:
   - Disabling flags priors than setting flags
 
 Example:
-* now.sh -i 495 -f -o /home/ubuntu/now -r 100 -t 3000 -c 86400
+* now.sh -i 495 -o /home/ubuntu/now -r 100 -t 3000 -c 86400
   - Override output directory to /home/ubuntu/now
   - Wait 86400 seconds (24hr) before starting this script
   - Download #495 show
   - Retries 100 times if download fails
   - Retries if total stream time is less than 3000 seconds
-* now.sh -i 495 -f -dr -dt -f -k
+* now.sh -i 495 -f -dr -dt -k
   - Do not retry download even if download fails
   - Do not check stream duration
   - Download #495 show immediately without checking time
