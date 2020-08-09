@@ -5,7 +5,7 @@
 # Now Downloader
 #
 # Created on 2020 May 12
-# Updated on 2020 July 27
+# Updated on 2020 August 09
 #
 # Author: TheNoFace (thenoface303@gmail.com)
 #
@@ -25,7 +25,7 @@ YLW='\033[1;33m' # Warning or alert
 GRN='\033[0;32m'
 NC='\033[0m' # No Color
 
-NDV="1.1.4"
+NDV="1.1.5"
 BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
 STMSG=("\n---$BANNER---------------------------------------$(date +'%F %a %T')---")
@@ -369,8 +369,8 @@ function contentget()
 			elif [ "$ctlength" -ge 2500 ] && [ "$lslength" -ge 1000 ]
 			then
 				info_msg "\n정상 content/livestatus 파일\n"
-				wget -O "${OPATH}/content/${d_date}_${SHOW_ID}".content https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content
-				wget -O "${OPATH}/content/${d_date}_${SHOW_ID}".livestatus https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
+				wget -O "${OPATH}/content/${SHOW_ID}_${d_date}.content" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content
+				wget -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
 				break
 			else
 				err_msg "\nERROR: contentget(): ctlength 1\n"
@@ -380,8 +380,8 @@ function contentget()
 	elif [ "$ctlength" -ge 2500 ] && [ "$lslength" -ge 1000 ]
 	then
 		info_msg "\n정상 content/livestatus 파일\n"
-		wget -O "${OPATH}/content/${d_date}_${SHOW_ID}".content https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content
-		wget -O "${OPATH}/content/${d_date}_${SHOW_ID}".livestatus https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
+		wget -O "${OPATH}/content/${SHOW_ID}_${d_date}.content" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content
+		wget -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
 	else
 		err_msg "\nERROR: contentget(): ctlength 2\n"
 		exit 1
@@ -391,8 +391,8 @@ function contentget()
 
 function content_backup()
 {
-	mv "${OPATH}/content/${d_date}_${SHOW_ID}.content" "${OPATH}/content/${d_date}_${SHOW_ID}.content.bak"
-	mv "${OPATH}/content/${d_date}_${SHOW_ID}.livestatus" "${OPATH}/content/${d_date}_${SHOW_ID}.livestatus.bak"
+	mv "${OPATH}/content/${SHOW_ID}_${d_date}.content" "${OPATH}/content/${SHOW_ID}_${d_date}.content.bak"
+	mv "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.bak"
 }
 
 function getstream()
@@ -536,28 +536,29 @@ function renamer()
 function exrefresh()
 {
 	unset url title startdate starttime
-	showhost=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.content" | grep -oP '호스트: \K[^\\r]+')
-	title=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.content" | grep -oP 'home":{"title":{"text":"\K[^"]+')
-	vcheck=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.content" | grep -oP 'video":\K[^,]+')
+	showhost=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.content" | grep -oP '호스트: \K[^\\r]+')
+	title=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.content" | grep -oP 'home":{"title":{"text":"\K[^"]+')
+	vcheck=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.content" | grep -oP 'video":\K[^,]+')
 	if [ "$vcheck" = 'true' ]
 	then
-		url=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.livestatus" | grep -oP 'videoStreamUrl":"\K[^"]+')
+		url=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'videoStreamUrl":"\K[^"]+')
 	else
-		url=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.livestatus" | grep -oP 'liveStreamUrl":"\K[^"]+')
+		url=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'liveStreamUrl":"\K[^"]+')
 	fi
-	startdate=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.livestatus" | grep -oP 'startDatetime":"20\K[^T]+')
-	starttime=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.livestatus" | grep -oP 'startDatetime":"\K[^"]+' | grep -oP 'T\K[^.+]+')
-	subject=$(jq '.contentList[].title.text' "${OPATH}/content/${d_date}_${SHOW_ID}.content")
-	des=$(jq '.contentList[].description.text' "${OPATH}/content/${d_date}_${SHOW_ID}.content")
-	ep=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.content" | grep -oP '"count":"\K[^회"]+')
-	onair=$(cat "${OPATH}/content/${d_date}_${SHOW_ID}.livestatus" | grep -oP ${SHOW_ID}'","status":"\K[^"]+') # READY | END | ONAIR
-	
-	if [ -d "${OPATH}/show/$title" ]
-	then
-		echo -e "Host: $showhost\n\nTitle:\n$subject\n\nDescription:\n$des" > "${OPATH}/show/$title/${d_date}_${showhost}_Info.txt"
-	fi
+	startdate=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'startDatetime":"20\K[^T]+')
+	starttime=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'startDatetime":"\K[^"]+' | grep -oP 'T\K[^.+]+')
+	subject=$(jq '.contentList[].title.text' "${OPATH}/content/${SHOW_ID}_${d_date}.content")
+	des=$(jq -r '.contentList[].description.text' "${OPATH}/content/${SHOW_ID}_${d_date}.content")
+	ep=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.content" | grep -oP '"count":"\K[^회"]+')
+	onair=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP ${SHOW_ID}'","status":"\K[^"]+') # READY | END | ONAIR
 
 	renamer "$subject" subject
+
+	if [ -d "${OPATH}/show/$title" ]
+	then
+		echo -e "Host: $showhost\nEP: $ep\n\n$subject\n\n$des" > "${OPATH}/show/$title/${d_date}_${showhost}_Info.txt"
+	fi
+
 	startdate=${startdate//'-'/}
 	starttime=${starttime//':'/}
 
@@ -725,6 +726,12 @@ function onairwait()
 function main()
 {
 	d_date=$(date +'%y%m%d')
+
+	# Live Status
+	wget -O "${OPATH}/content/${d_date}_LiveList.html" https://now.naver.com/api/nnow/v1/stream/livelist
+	jq '.liveList[]' "${OPATH}/content/${d_date}_LiveList.html" > "${OPATH}/content/${d_date}_LiveList.txt"
+	rm "${OPATH}/content/${d_date}_LiveList.html"
+
 	contentget
 	exrefresh
 	timeupdate
