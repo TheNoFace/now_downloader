@@ -1,7 +1,7 @@
 # Now-Downloader
 
 Bash script to download streaming from [Naver NOW](https://now.naver.com)   
-Current version: 1.1.5 (20200809)
+Version: 1.1.5
 
 ### Required packages
 - bc
@@ -20,9 +20,11 @@ Required:
 Options:
   -v  | --version             Show program name and version
   -h  | --help                Show this help screen
+  -vb | --verbose             Display various information (curl/wget)
   -f  | --force               Start download immediately without any time checks
   -k  | --keep                Do not delete original audio stream(.ts) file after download finishes
   -o  | --opath <dir>         Overrides output path to check if it's been set before
+  -dc | --dcont               Do not check integrity of content/livestatus files in content folder
   -r  | --maxretry [number]   Maximum retries if download fails
                               Default is set to 10 (times)
   -dr | --dretry              Disable retries (same as -r 0)

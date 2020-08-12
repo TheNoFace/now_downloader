@@ -5,13 +5,13 @@
 # Now Downloader
 #
 # Created on 2020 May 12
-# Updated on 2020 August 09
+# Updated on 2020 August 12
 #
 # Author: TheNoFace (thenoface303@gmail.com)
 #
 # TODO:
-# 200531-1) 방송 시각과 현재 시각 차이가 20분 이상이면 (시각차이-20)분 sleep
-# 200531-2) ERROR CHECK에 $vcheck = true일 경우 오디오/비디오 스트림 동시에 받기
+# 200531) 방송 시각과 현재 시각 차이가 20분 이상이면 (시각차이-20)분 sleep
+# 200812) 방송 요일 구해서 금일 방송이 아니라면 자동 custimer
 #
 #------------------------------------------------------------------
 
@@ -28,7 +28,7 @@ NC='\033[0m' # No Color
 NDV="1.1.5"
 BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
-STMSG=("\n---$BANNER---------------------------------------$(date +'%F %a %T')---")
+STMSG=("\n---$BANNER---------------------------------$(date +'%F %a %T')---")
 
 P_LIST=(bc curl jq youtube-dl ffmpeg)
 P_LIST_E=0
@@ -37,12 +37,14 @@ SHOW_ID=""
 FORCE=""
 KEEP=""
 OPATH_I=""
+D_CHECK=""
 MAXRETRY=""
 N_RETRY=""
 PTIMETH=""
 N_PTIMETH=""
 CUSTIMER=""
 SREASON=""
+VERB=""
 
 RETRY="0"
 EXRETRY="0"
@@ -114,6 +116,8 @@ function get_parms()
 				KEEP=1 ; shift ;;
 			-o|--opath)
 				OPATH_I="$2" ; shift ; shift ;;
+			-dc|--dcont)
+				D_CHECK=1 ; shift ;;
 			-r|--maxretry)
 				MAXRETRY="$2" ; shift ; shift ;;
 			-dr|--dretry)
@@ -124,6 +128,8 @@ function get_parms()
 				N_PTIMETH=1 ; shift ;;
 			-c|--custimer)
 				CUSTIMER="$2" ; shift ; shift ;;
+			-vb|--verbose)
+				VERB=1 ; shift ;;
 			*)
 				check_invalid_parms "$1" ; break ;;
 		esac
@@ -162,9 +168,11 @@ function print_help()
 Options:
   -v  | --version             Show program name and version
   -h  | --help                Show this help screen
+  -vb | --verbose             Display various information (curl/wget)
   -f  | --force               Start download immediately without any time checks
   -k  | --keep                Do not delete original audio stream(.ts) file after download finishes
   -o  | --opath <dir>         Overrides output path to check if it's been set before
+  -dc | --dcont               Do not check integrity of content/livestatus files in content folder
   -r  | --maxretry [number]   Maximum retries if download fails
                               Default is set to 10 (times)
   -dr | --dretry              Disable retries (same as -r 0)
@@ -238,6 +246,16 @@ function script_init()
 		info_msg "\nPackage check OK!\n"
 	fi
 
+	if [ -n "$VERB" ]
+	then
+		alert_msg "Verbose Mode"
+		curl_c="curl"
+		wget_c="wget"
+	else
+		curl_c="curl --no-progress-meter"
+		wget_c="wget -q"
+	fi
+
 	if [ -n "$FORCE" ]
 	then
 		alert_msg "Force Download Enabled"
@@ -262,6 +280,11 @@ function script_init()
 	if [ -z "$CUSTIMER" ]
 	then
 		alert_msg "Custom timer before start is not set"
+	fi
+
+	if [ -n "$D_CHECK" ]
+	then
+		alert_msg "Do not check integrity of content/livestatus files in content folder"
 	fi
 
 	if [ -z ${OPATH_I} ]
@@ -338,55 +361,61 @@ function script_init()
 # livestatus: audio/video stream information of show
 function contentget()
 {
-	ctlength=$(curl --retry ${MAXRETRY} --retry-connrefused --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content | grep -oP 'content-length: \K[0-9]*')
-	lslength=$(curl --retry ${MAXRETRY} --retry-connrefused --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus | grep -oP 'content-length: \K[0-9]*')
-	msg "\nctlength: $ctlength / lslength: $lslength"
-	if [ "$ctlength" -lt 2500 ] && [ "$lslength" -lt 1000 ]
+	if [ -z $D_CHECK ]
 	then
-		ctretry=0
-		alert_msg "\ncontent/livestatus 파일이 올바르지 않음, 1초 후 재시도"
-		while :
-		do
-			((ctretry++))
-			counter 1
-			echo -e "재시도 횟수: $ctretry / 최대 재시도 횟수: $MAXRETRY\n"
-			ctlength=$(curl --retry ${MAXRETRY} --retry-connrefused --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content | grep -oP 'content-length: \K[0-9]*')
-			lslength=$(curl --retry ${MAXRETRY} --retry-connrefused --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus | grep -oP 'content-length: \K[0-9]*')
-			echo -e "\nctlength: $ctlength / lslength: $lslength"
-			if [ "$ctlength" -lt 2500 ] && [ "$lslength" -lt 1000 ]
-			then
-				if [ "$ctretry" -lt "$MAXRETRY" ]
+		ctlength=$($curl_c --retry ${MAXRETRY} --retry-connrefused --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content | grep -oP 'content-length: \K[0-9]*')
+		lslength=$($curl_c --retry ${MAXRETRY} --retry-connrefused --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus | grep -oP 'content-length: \K[0-9]*')
+		msg "ctlength: $ctlength / lslength: $lslength"
+		if [ "$ctlength" -lt 2500 ] && [ "$lslength" -lt 1000 ]
+		then
+			ctretry=0
+			alert_msg "\ncontent/livestatus 파일이 올바르지 않음, 1초 후 재시도"
+			while :
+			do
+				((ctretry++))
+				counter 1
+				echo -e "재시도 횟수: $ctretry / 최대 재시도 횟수: $MAXRETRY\n"
+				ctlength=$($curl_c --retry ${MAXRETRY} --retry-connrefused --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content | grep -oP 'content-length: \K[0-9]*')
+				lslength=$($curl_c --retry ${MAXRETRY} --retry-connrefused --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus | grep -oP 'content-length: \K[0-9]*')
+				msg "ctlength: $ctlength / lslength: $lslength"
+				if [ "$ctlength" -lt 2500 ] && [ "$lslength" -lt 1000 ]
 				then
-					alert_msg "\ncontent/livestatus 파일이 올바르지 않음, 1초 후 재시도"
-				elif [ "$ctretry" -ge "$MAXRETRY" ]
+					if [ "$ctretry" -lt "$MAXRETRY" ]
+					then
+						alert_msg "\ncontent/livestatus 파일이 올바르지 않음, 1초 후 재시도"
+					elif [ "$ctretry" -ge "$MAXRETRY" ]
+					then
+						err_msg "\n다운로드 실패\n최대 재시도 횟수($MAXRETRY회) 도달, 스크립트 종료\n"
+						exit 1
+					else
+						err_msg "\nERROR: contentget(): ctretry,MAXRETRY\n"
+						exit 1
+					fi
+				elif [ "$ctlength" -ge 2500 ] && [ "$lslength" -ge 1000 ]
 				then
-					err_msg "\n다운로드 실패\n최대 재시도 횟수($MAXRETRY회) 도달, 스크립트 종료\n"
-					exit 1
+					info_msg "정상 content/livestatus 파일\n"
+					$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.content" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content
+					$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
+					break
 				else
-					err_msg "\nERROR: contentget(): ctretry,MAXRETRY\n"
+					err_msg "\nERROR: contentget(): ctlength 1\n"
 					exit 1
 				fi
-			elif [ "$ctlength" -ge 2500 ] && [ "$lslength" -ge 1000 ]
-			then
-				info_msg "\n정상 content/livestatus 파일\n"
-				wget -O "${OPATH}/content/${SHOW_ID}_${d_date}.content" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content
-				wget -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
-				break
-			else
-				err_msg "\nERROR: contentget(): ctlength 1\n"
-				exit 1
-			fi
-		done
-	elif [ "$ctlength" -ge 2500 ] && [ "$lslength" -ge 1000 ]
-	then
-		info_msg "\n정상 content/livestatus 파일\n"
-		wget -O "${OPATH}/content/${SHOW_ID}_${d_date}.content" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content
-		wget -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
+			done
+		elif [ "$ctlength" -ge 2500 ] && [ "$lslength" -ge 1000 ]
+		then
+			info_msg "정상 content/livestatus 파일\n"
+			$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.content" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content
+			$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
+		else
+			err_msg "\nERROR: contentget(): ctlength 2\n"
+			exit 1
+		fi
+		ctretry=0
 	else
-		err_msg "\nERROR: contentget(): ctlength 2\n"
-		exit 1
+		$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.content" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content
+		$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
 	fi
-	unset ctretry
 }
 
 function content_backup()
@@ -454,7 +483,8 @@ function getstream()
 		err_msg "ERROR: gsretry()\n"
 		exit 1
 	fi
-	unset RETRY ypid pstatus
+	unset ypid pstatus
+	RETRY=0
 	info_msg "\n다운로드 완료, 3초 대기"
 	counter 3
 
@@ -564,6 +594,8 @@ function exrefresh()
 
 	if [ -z "$url" ] || [ -z "$title" ] || [ -z "$startdate" ] || [ -z "$starttime" ]
 	then
+		curl_c="curl"
+		wget_c="wget"
 		if [ "$MAXRETRY" = "0" ]
 		then
 			err_msg "\nexrefresh(): 정보 업데이트 실패, 스크립트 종료\n"
@@ -576,7 +608,7 @@ function exrefresh()
 		fi
 		if [ -z "$EXRETRY" ] || [ "$EXRETRY" -lt "$MAXRETRY" ]
 		then
-			alert_msg "\n정보 업데이트 실패, 재시도 합니다\n"
+			err_msg "정보 업데이트 실패, 재시도 합니다"
 			((EXRETRY++))
 		elif [ "$EXRETRY" -ge "$MAXRETRY" ]
 		then
@@ -588,14 +620,15 @@ function exrefresh()
 			content_backup
 			exit 1
 		fi
-		error_msg "Invalid URL/Title/STARTDATE/STARTTIME"
 		msg "\nSTARTDATE: $startdate\nSTARTTIME: $starttime\nTITLE:$title\nURL:$url\n"
 		msg "Retrying...\n"
 		contentget
 		exrefresh
 	fi
-	alert_msg "Show Info variables refreshed\n"
-	unset EXRETRY
+	alert_msg "Show Info variables refreshed"
+	EXRETRY=0
+	curl_c="curl --no-progress-meter"
+	wget_c="wget -q"
 }
 
 function timeupdate()
@@ -648,7 +681,10 @@ function onairwait()
 
 		if [ "$timecheck" -le -15 ]
 		then
-			err_msg "\nERROR: 시작시간과 15분 이상 차이 발생\n금일 방송 유무를 확인해주세요\n"
+			line=$(expr $(grep -n '"contentId": "'${SHOW_ID}'"' "${OPATH}/content/${d_date}_LiveList.txt" | cut -d : -f 1) + 3)
+			b_day=$(sed -n ${line}p "${OPATH}/content/${d_date}_LiveList.txt" | cut -d '"' -f 4)
+			err_msg "\nERROR: 시작시간과 15분 이상 차이 발생\n금일 방송 유무를 확인해주세요"
+			err_msg "\n쇼 이름: $title\n방송 시간: $b_day\n"
 			exit 1
 		fi
 
@@ -728,7 +764,7 @@ function main()
 	d_date=$(date +'%y%m%d')
 
 	# Live Status
-	wget -O "${OPATH}/content/${d_date}_LiveList.html" https://now.naver.com/api/nnow/v1/stream/livelist
+	$wget_c -O "${OPATH}/content/${d_date}_LiveList.html" https://now.naver.com/api/nnow/v1/stream/livelist
 	jq '.liveList[]' "${OPATH}/content/${d_date}_LiveList.html" > "${OPATH}/content/${d_date}_LiveList.txt"
 	rm "${OPATH}/content/${d_date}_LiveList.html"
 
