@@ -19,13 +19,21 @@
 # contentget -> exrefresh -> timeupdate
 # onairwait -> getstream -> convert
 
-# Color template: echo -e "${RED}TITLE${GRN}MESSAGE${NC}"
-RED='\033[0;31m' # Error or force exit
-YLW='\033[1;33m' # Warning or alert
-GRN='\033[0;32m'
-NC='\033[0m' # No Color
+# Color template
+if [ -t 1 ]
+then
+	RED=$(tput setaf 1)
+	GRN=$(tput setaf 2)
+	YLW=$(tput setaf 3)
+	NC=$(tput sgr0)
+else
+	RED=""
+	GRN=""
+	YLW=""
+	NC=""
+fi
 
-NDV="1.1.6"
+NDV="1.2.0"
 BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
 STMSG=("\n---$BANNER---------------------------------$(date +'%F %a %T')---")
@@ -661,8 +669,12 @@ function counter()
 		msg "\n총 $TIMER초 동안 대기합니다"
 		while [ "$TIMER" -gt 0 ]
 		do
-			echo -ne "$TIMER\033[0K초 남음\r"
+			echo "$TIMER초 남음"
 			sleep 1
+			if [ -t 1 ]
+			then
+				tput cuu1;tput el
+			fi
 			((TIMER--))
 		done
 		echo -e '\n'
