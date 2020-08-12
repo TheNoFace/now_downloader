@@ -25,7 +25,7 @@ YLW='\033[1;33m' # Warning or alert
 GRN='\033[0;32m'
 NC='\033[0m' # No Color
 
-NDV="1.1.5"
+NDV="1.1.6"
 BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
 STMSG=("\n---$BANNER---------------------------------$(date +'%F %a %T')---")
@@ -46,6 +46,7 @@ CUSTIMER=""
 SREASON=""
 VERB=""
 
+CTRETRY="0"
 RETRY="0"
 EXRETRY="0"
 
@@ -365,30 +366,29 @@ function contentget()
 	then
 		ctlength=$($curl_c --retry ${MAXRETRY} --retry-connrefused --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content | grep -oP 'content-length: \K[0-9]*')
 		lslength=$($curl_c --retry ${MAXRETRY} --retry-connrefused --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus | grep -oP 'content-length: \K[0-9]*')
-		msg "ctlength: $ctlength / lslength: $lslength"
+		msg "content: $ctlength Bytes / livestatus: $lslength Bytes"
 		if [ "$ctlength" -lt 2500 ] && [ "$lslength" -lt 1000 ]
 		then
-			ctretry=0
 			alert_msg "\ncontent/livestatus 파일이 올바르지 않음, 1초 후 재시도"
 			while :
 			do
-				((ctretry++))
+				((CTRETRY++))
 				counter 1
-				echo -e "재시도 횟수: $ctretry / 최대 재시도 횟수: $MAXRETRY\n"
+				echo -e "재시도 횟수: $CTRETRY / 최대 재시도 횟수: $MAXRETRY\n"
 				ctlength=$($curl_c --retry ${MAXRETRY} --retry-connrefused --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content | grep -oP 'content-length: \K[0-9]*')
 				lslength=$($curl_c --retry ${MAXRETRY} --retry-connrefused --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus | grep -oP 'content-length: \K[0-9]*')
-				msg "ctlength: $ctlength / lslength: $lslength"
+				msg "content: $ctlength Bytes / livestatus: $lslength Bytes"
 				if [ "$ctlength" -lt 2500 ] && [ "$lslength" -lt 1000 ]
 				then
-					if [ "$ctretry" -lt "$MAXRETRY" ]
+					if [ "$CTRETRY" -lt "$MAXRETRY" ]
 					then
 						alert_msg "\ncontent/livestatus 파일이 올바르지 않음, 1초 후 재시도"
-					elif [ "$ctretry" -ge "$MAXRETRY" ]
+					elif [ "$CTRETRY" -ge "$MAXRETRY" ]
 					then
 						err_msg "\n다운로드 실패\n최대 재시도 횟수($MAXRETRY회) 도달, 스크립트 종료\n"
 						exit 1
 					else
-						err_msg "\nERROR: contentget(): ctretry,MAXRETRY\n"
+						err_msg "\nERROR: contentget(): CTRETRY,MAXRETRY\n"
 						exit 1
 					fi
 				elif [ "$ctlength" -ge 2500 ] && [ "$lslength" -ge 1000 ]
@@ -411,7 +411,7 @@ function contentget()
 			err_msg "\nERROR: contentget(): ctlength 2\n"
 			exit 1
 		fi
-		ctretry=0
+		CTRETRY=0
 	else
 		$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.content" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content
 		$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
