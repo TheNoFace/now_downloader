@@ -12,6 +12,7 @@
 # TODO:
 # 200531) 방송 시각과 현재 시각 차이가 20분 이상이면 (시각차이-20)분 sleep
 # 200812) 방송 요일 구해서 금일 방송이 아니라면 자동 custimer
+# 200812) contentget에서 curl 삭제, wget으로 파일 받은 후 크기 비교, 이상 시 다시 받기
 #
 #------------------------------------------------------------------
 
@@ -33,10 +34,9 @@ else
 	NC=""
 fi
 
-NDV="1.2.0"
+NDV="1.2.1"
 BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
-STMSG=("\n---$BANNER---------------------------------$(date +'%F %a %T')---")
 
 P_LIST=(bc curl jq youtube-dl ffmpeg)
 P_LIST_E=0
@@ -139,6 +139,8 @@ function get_parms()
 				CUSTIMER="$2" ; shift ; shift ;;
 			-vb|--verbose)
 				VERB=1 ; shift ;;
+			-u|--user)
+				G_USR=1 ; shift ;;
 			*)
 				check_invalid_parms "$1" ; break ;;
 		esac
@@ -177,6 +179,7 @@ function print_help()
 Options:
   -v  | --version             Show program name and version
   -h  | --help                Show this help screen
+  -u  | --user                Display current/total users of the show
   -vb | --verbose             Display various information (curl/wget)
   -f  | --force               Start download immediately without any time checks
   -k  | --keep                Do not delete original audio stream(.ts) file after download finishes
@@ -233,6 +236,8 @@ function dir_check()
 
 function script_init()
 {
+	d_date=$(date +'%y%m%d')
+
 	for l in ${P_LIST[@]}
 	{
 		P=$(command -v $l)
@@ -251,8 +256,13 @@ function script_init()
 		err_msg "Please install required package(s)\n"
 		exit 1
 	else
-		echo -e ${STMSG}
-		info_msg "\nPackage check OK!\n"
+		if [ -t 1 ]
+		then
+			info_msg "\nPackage check OK!\n"
+		else
+			msg "\n---$BANNER-----------ShowID: ${SHOW_ID}-----------$(date +'%F %a %T')---"
+			info_msg "\nPackage check OK!\n"
+		fi
 	fi
 
 	if [ -n "$VERB" ]
@@ -363,6 +373,23 @@ function script_init()
 	if [ -z "$N_RETRY" ] || [ -z "$N_PTIMETH" ] || [ -n "$CUSTIMER" ]
 	then
 		echo # For better logging
+	fi
+
+	if [ -n "$G_USR" ]
+	then
+		contentget
+		exrefresh
+		cur_user=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'concurrentUserCount":\K[^,]+')
+		total_user=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'cumulativeUserCount":\K[^}]+')
+
+		msg "\n$startdate $title by $showhost\n$subject"
+		if [ "$onair" = "ONAIR" ]
+		then
+			msg "접속자 수: $cur_user / 총 조회수: $total_user\n"
+		else
+			msg "총 조회수: $total_user\n"
+		fi
+		exit 0
 	fi
 }
 
@@ -558,6 +585,11 @@ function convert()
 	then
 		rm "${OPATH}/show/$title/${FILENAME}.ts"
 	fi
+
+	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
+	total_user=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'cumulativeUserCount":\K[^}]+')
+	msg "\n오늘 조회수: $total_user"
+
 	info_msg "\nJob Finished, Code: $SREASON\n"
 	exit 0 ### SCRIPT FINISH
 }
@@ -655,6 +687,7 @@ function timeupdate()
 		FILENAME="${d_date}.NAVER NOW.$title.E$ep.${subject}_$hour$min$sec"
 	fi
 	FILENAME=${FILENAME//'/'/' '}
+	FILENAME=${FILENAME//'%'/'%%'}
 	alert_msg "Time variables refreshed\n"
 }
 
@@ -773,8 +806,6 @@ function onairwait()
 
 function main()
 {
-	d_date=$(date +'%y%m%d')
-
 	# Live Status
 	$wget_c -O "${OPATH}/content/${d_date}_LiveList.html" https://now.naver.com/api/nnow/v1/stream/livelist
 	jq '.liveList[]' "${OPATH}/content/${d_date}_LiveList.html" > "${OPATH}/content/${d_date}_LiveList.txt"

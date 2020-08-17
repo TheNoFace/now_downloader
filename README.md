@@ -1,7 +1,7 @@
 # Now-Downloader
 
 Bash script to download streaming from [Naver NOW](https://now.naver.com)   
-Version: 1.2.0
+Version: 1.2.1
 
 ### Required packages
 - bc
@@ -20,6 +20,7 @@ Required:
 Options:
   -v  | --version             Show program name and version
   -h  | --help                Show this help screen
+  -u  | --user                Display current/total users of the show
   -vb | --verbose             Display various information (curl/wget)
   -f  | --force               Start download immediately without any time checks
   -k  | --keep                Do not delete original audio stream(.ts) file after download finishes
