@@ -5,7 +5,6 @@
 # Now Downloader
 #
 # Created on 2020 May 12
-# Updated on 2020 August 12
 #
 # Author: TheNoFace (thenoface303@gmail.com)
 #
@@ -34,7 +33,7 @@ else
 	NC=""
 fi
 
-NDV="1.2.1"
+NDV="1.2.2"
 BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
 
@@ -455,8 +454,8 @@ function contentget()
 
 function content_backup()
 {
-	mv "${OPATH}/content/${SHOW_ID}_${d_date}.content" "${OPATH}/content/${SHOW_ID}_${d_date}.content.bak"
-	mv "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.bak"
+	mv "${OPATH}/content/${SHOW_ID}_${d_date}.content" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}.content"
+	mv "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}.livestatus"
 }
 
 function getstream()
@@ -726,8 +725,8 @@ function onairwait()
 
 		if [ "$timecheck" -le -15 ]
 		then
-			line=$(expr $(grep -n '"contentId": "'${SHOW_ID}'"' "${OPATH}/content/${d_date}_LiveList.txt" | cut -d : -f 1) + 3)
-			b_day=$(sed -n ${line}p "${OPATH}/content/${d_date}_LiveList.txt" | cut -d '"' -f 4)
+			line=$(expr $(grep -n '"contentId": "'${SHOW_ID}'"' "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.txt" | cut -d : -f 1) + 3)
+			b_day=$(sed -n ${line}p "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.txt" | cut -d '"' -f 4)
 			err_msg "\nERROR: 시작시간과 15분 이상 차이 발생\n금일 방송 유무를 확인해주세요"
 			err_msg "\n쇼 이름: $title\n방송 시간: $b_day\n"
 			exit 1
@@ -807,9 +806,9 @@ function onairwait()
 function main()
 {
 	# Live Status
-	$wget_c -O "${OPATH}/content/${d_date}_LiveList.html" https://now.naver.com/api/nnow/v1/stream/livelist
-	jq '.liveList[]' "${OPATH}/content/${d_date}_LiveList.html" > "${OPATH}/content/${d_date}_LiveList.txt"
-	rm "${OPATH}/content/${d_date}_LiveList.html"
+	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.html" https://now.naver.com/api/nnow/v1/stream/livelist
+	jq '.liveList[]' "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.html" > "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.txt"
+	rm "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.html"
 
 	contentget
 	exrefresh
