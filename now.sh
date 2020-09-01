@@ -11,7 +11,7 @@
 # TODO:
 # 200531) 방송 시각과 현재 시각 차이가 20분 이상이면 (시각차이-20)분 sleep
 # 200812) 방송 요일 구해서 금일 방송이 아니라면 자동 custimer
-# 200812) contentget에서 curl 삭제, wget으로 파일 받은 후 크기 비교, 이상 시 다시 받기
+# 200829) onairwait 대기 중 24시 넘어가면 Time Difference +24시간 재설정
 #
 #------------------------------------------------------------------
 
@@ -33,18 +33,18 @@ else
 	NC=""
 fi
 
-NDV="1.2.2"
+NDV="1.2.3"
 BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
 
-P_LIST=(bc curl jq youtube-dl ffmpeg)
+P_LIST=(bc jq youtube-dl ffmpeg)
 P_LIST_E=0
 
 SHOW_ID=""
 FORCE=""
 KEEP=""
 OPATH_I=""
-D_CHECK=""
+ITG_CHECK=""
 MAXRETRY=""
 N_RETRY=""
 PTIMETH=""
@@ -125,7 +125,7 @@ function get_parms()
 			-o|--opath)
 				OPATH_I="$2" ; shift ; shift ;;
 			-dc|--dcont)
-				D_CHECK=1 ; shift ;;
+				ITG_CHECK=1 ; shift ;;
 			-r|--maxretry)
 				MAXRETRY="$2" ; shift ; shift ;;
 			-dr|--dretry)
@@ -179,7 +179,7 @@ Options:
   -v  | --version             Show program name and version
   -h  | --help                Show this help screen
   -u  | --user                Display current/total users of the show
-  -vb | --verbose             Display various information (curl/wget)
+  -vb | --verbose             Display wget download information
   -f  | --force               Start download immediately without any time checks
   -k  | --keep                Do not delete original audio stream(.ts) file after download finishes
   -o  | --opath <dir>         Overrides output path to check if it's been set before
@@ -223,7 +223,7 @@ function dir_check()
 		if [ $pstatus != 0 ]
 		then
 			err_msg "\nERROR: Couldn't create directory\nAre you sure you have proper ownership?\n"
-			exit 1
+			exit 3
 		fi
 
 		info_msg "\nCreated Output Directory: ${OPATH}"
@@ -253,7 +253,7 @@ function script_init()
 		array=${NFOUND[@]}
 		err_msg "Couldn't find follow package(s): $array"
 		err_msg "Please install required package(s)\n"
-		exit 1
+		exit 4
 	else
 		if [ -t 1 ]
 		then
@@ -267,10 +267,8 @@ function script_init()
 	if [ -n "$VERB" ]
 	then
 		alert_msg "Verbose Mode"
-		curl_c="curl"
 		wget_c="wget"
 	else
-		curl_c="curl --no-progress-meter"
 		wget_c="wget -q"
 	fi
 
@@ -300,7 +298,7 @@ function script_init()
 		alert_msg "Custom timer before start is not set"
 	fi
 
-	if [ -n "$D_CHECK" ]
+	if [ -n "$ITG_CHECK" ]
 	then
 		alert_msg "Do not check integrity of content/livestatus files in content folder"
 	fi
@@ -321,7 +319,7 @@ function script_init()
 			echo -e "If you want to change output path, delete ${YLW}$PWD/.opath${NC} file or use -o option\n"
 		else
 			err_msg "\nERROR: script_init OPATH\n"
-			exit 1
+			exit 5
 		fi
 	elif [ -n ${OPATH_I} ]
 	then
@@ -382,11 +380,11 @@ function script_init()
 		total_user=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'cumulativeUserCount":\K[^}]+')
 
 		msg "\n$startdate $title by $showhost\n$subject"
-		if [ "$onair" = "ONAIR" ]
+		if [ "$ONAIR" = "ONAIR" ]
 		then
-			msg "접속자 수: $cur_user / 총 조회수: $total_user\n"
+			msg "방송 상태: $ONAIR\n접속자 수: $cur_user / 오늘 총 조회수: $total_user\n"
 		else
-			msg "총 조회수: $total_user\n"
+			msg "방송 상태: $ONAIR\n총 조회수: $total_user\n"
 		fi
 		exit 0
 	fi
@@ -396,59 +394,67 @@ function script_init()
 # livestatus: audio/video stream information of show
 function contentget()
 {
-	if [ -z $D_CHECK ]
+	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
+	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.content" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content
+	if [ -z $ITG_CHECK ]
 	then
-		ctlength=$($curl_c --retry ${MAXRETRY} --retry-connrefused --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content | grep -oP 'content-length: \K[0-9]*')
-		lslength=$($curl_c --retry ${MAXRETRY} --retry-connrefused --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus | grep -oP 'content-length: \K[0-9]*')
+		ctlength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}.content" | awk '{print $1}')
+		lslength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | awk '{print $1}')
 		msg "content: $ctlength Bytes / livestatus: $lslength Bytes"
 		if [ "$ctlength" -lt 2500 ] && [ "$lslength" -lt 1000 ]
 		then
-			alert_msg "\ncontent/livestatus 파일이 올바르지 않음, 1초 후 재시도"
+			if [ "$MAXRETRY" = "0" ]
+			then
+				err_msg "content/livestatus 파일이 올바르지 않음, 스크립트 종료\n"
+				content_backup
+				exit 1
+			fi
+			alert_msg "content/livestatus 파일이 올바르지 않음, 다시 시도합니다"
 			while :
 			do
 				((CTRETRY++))
-				counter 1
-				echo -e "재시도 횟수: $CTRETRY / 최대 재시도 횟수: $MAXRETRY\n"
-				ctlength=$($curl_c --retry ${MAXRETRY} --retry-connrefused --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content | grep -oP 'content-length: \K[0-9]*')
-				lslength=$($curl_c --retry ${MAXRETRY} --retry-connrefused --head https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus | grep -oP 'content-length: \K[0-9]*')
+				msg "\n재시도 횟수: $CTRETRY / 최대 재시도 횟수: $MAXRETRY\n"
+				$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
+				$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.content" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content
+				ctlength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}.content" | awk '{print $1}')
+				lslength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | awk '{print $1}')
 				msg "content: $ctlength Bytes / livestatus: $lslength Bytes"
 				if [ "$ctlength" -lt 2500 ] && [ "$lslength" -lt 1000 ]
 				then
 					if [ "$CTRETRY" -lt "$MAXRETRY" ]
 					then
-						alert_msg "\ncontent/livestatus 파일이 올바르지 않음, 1초 후 재시도"
+						alert_msg "content/livestatus 파일이 올바르지 않음, 다시 시도합니다"
 					elif [ "$CTRETRY" -ge "$MAXRETRY" ]
 					then
-						err_msg "\n다운로드 실패\n최대 재시도 횟수($MAXRETRY회) 도달, 스크립트 종료\n"
+						err_msg "최대 재시도 횟수($MAXRETRY회) 도달, 스크립트 종료\n"
+						content_backup
 						exit 1
 					else
 						err_msg "\nERROR: contentget(): CTRETRY,MAXRETRY\n"
+						content_backup
 						exit 1
 					fi
 				elif [ "$ctlength" -ge 2500 ] && [ "$lslength" -ge 1000 ]
 				then
 					info_msg "정상 content/livestatus 파일\n"
-					$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.content" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content
-					$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
 					break
 				else
 					err_msg "\nERROR: contentget(): ctlength 1\n"
+					content_backup
 					exit 1
 				fi
 			done
 		elif [ "$ctlength" -ge 2500 ] && [ "$lslength" -ge 1000 ]
 		then
 			info_msg "정상 content/livestatus 파일\n"
-			$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.content" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content
-			$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
 		else
 			err_msg "\nERROR: contentget(): ctlength 2\n"
+			content_backup
 			exit 1
 		fi
 		CTRETRY=0
 	else
-		$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.content" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content
-		$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
+		alert_msg "Passed integrity check!"
 	fi
 }
 
@@ -456,6 +462,7 @@ function content_backup()
 {
 	mv "${OPATH}/content/${SHOW_ID}_${d_date}.content" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}.content"
 	mv "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}.livestatus"
+	mv "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.txt" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_LiveList.txt"
 }
 
 function getstream()
@@ -470,7 +477,7 @@ function getstream()
 	#-ERROR-CHECK------------------------------------------------------
 	youtube-dl --hls-use-mpegts "$url" --output "${OPATH}/show/$title/${FILENAME}.ts" \
 	& ypid="$!"
-	
+
 	echo -e "youtube-dl PID=${ypid}\n"
 	wait ${ypid}
 	pstatus="$?"
@@ -482,6 +489,7 @@ function getstream()
 		if [ "$MAXRETRY" = "0" ]
 		then
 			err_msg "\ngetstream(): 다운로드 실패, 스크립트 종료\n"
+			content_backup
 			exit 1
 		fi
 		if [ "$RETRY" != "0" ]
@@ -495,9 +503,11 @@ function getstream()
 		elif [ "$RETRY" -ge "$MAXRETRY" ]
 		then
 			err_msg "\ngetstream(): 다운로드 실패\n최대 재시도 횟수($MAXRETRY회) 도달, 스크립트 종료\n"
+			content_backup
 			exit 1
 		else
 			err_msg "\nERROR: getstream(): MAXRETRY\n"
+			content_backup
 			exit 1
 		fi
 		contentget
@@ -515,6 +525,7 @@ function getstream()
 	else
 		err_msg "\nyoutube-dl: exit code $pstatus"
 		err_msg "ERROR: gsretry()\n"
+		content_backup
 		exit 1
 	fi
 	unset ypid pstatus
@@ -533,9 +544,9 @@ function getstream()
 		then
 			if [ -z "$sfailcheck" ]
 			then
-				err_msg "\n스트리밍이 정상 종료되지 않음, 1분 후 재시작"
+				err_msg "\n스트리밍이 정상 종료되지 않음, 15초 후 재시작"
 				sfailcheck=1
-				counter 60
+				counter 15
 				contentget
 				exrefresh
 				timeupdate
@@ -546,6 +557,7 @@ function getstream()
 				convert
 			else
 				err_msg "\nERROR: sfailcheck\n"
+				content_backup
 				exit 1
 			fi
 		elif [ "$ptime" -ge "$PTIMETH" ]
@@ -554,6 +566,7 @@ function getstream()
 			convert
 		else
 			err_msg "\nERROR: ptime/PTIMETH\n"
+			content_backup
 			exit 1
 		fi
 	fi
@@ -567,7 +580,7 @@ function convert()
 	fi
 	codec=$(ffprobe -v error -show_streams -select_streams a "${OPATH}/show/$title/${FILENAME}.ts" | grep -oP 'codec_name=\K[^+]*')
 	if [ "$codec" = 'mp3' ]
-	then 
+	then
 		msg "\nCodec: MP3, Saving into mp3 file\n"
 		ffmpeg -i "${OPATH}/show/$title/${FILENAME}.ts" -vn -c:a copy "${OPATH}/show/$title/${FILENAME}.mp3"
 		msg "\nConvert Complete: ${FILENAME}.mp3"
@@ -578,6 +591,7 @@ function convert()
 		msg "\nConvert Complete: ${FILENAME}.m4a"
 	else
 		err_msg "\nERROR: Unidentified Codec ($codec)"
+		content_backup
 		exit 1
 	fi
 	if [ "$vcheck" != 'true' ] && [ -z "$KEEP" ]
@@ -587,7 +601,7 @@ function convert()
 
 	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
 	total_user=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'cumulativeUserCount":\K[^}]+')
-	msg "\n오늘 조회수: $total_user"
+	msg "\n오늘 총 조회수: $total_user"
 
 	info_msg "\nJob Finished, Code: $SREASON\n"
 	exit 0 ### SCRIPT FINISH
@@ -619,55 +633,53 @@ function exrefresh()
 	subject=$(jq '.contentList[].title.text' "${OPATH}/content/${SHOW_ID}_${d_date}.content")
 	des=$(jq -r '.contentList[].description.text' "${OPATH}/content/${SHOW_ID}_${d_date}.content")
 	ep=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.content" | grep -oP '"count":"\K[^회"]+')
-	onair=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP ${SHOW_ID}'","status":"\K[^"]+') # READY | END | ONAIR
+	ONAIR=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP ${SHOW_ID}'","status":"\K[^"]+') # READY | END | ONAIR
 
 	renamer "$subject" subject
-
-	if [ -d "${OPATH}/show/$title" ]
-	then
-		echo -e "Host: $showhost\nEP: $ep\n\n$subject\n\n$des" > "${OPATH}/show/$title/${d_date}_${showhost}_Info.txt"
-	fi
-
 	startdate=${startdate//'-'/}
 	starttime=${starttime//':'/}
 
-	if [ -z "$url" ] || [ -z "$title" ] || [ -z "$startdate" ] || [ -z "$starttime" ]
+	if [ -z "$G_USR" ]
 	then
-		curl_c="curl"
-		wget_c="wget"
-		if [ "$MAXRETRY" = "0" ]
+		if [ -d "${OPATH}/show/$title" ]
 		then
-			err_msg "\nexrefresh(): 정보 업데이트 실패, 스크립트 종료\n"
-			content_backup
-			exit 1
+			echo -e "Host: $showhost\nEP: $ep\n\n$subject\n\n$des" > "${OPATH}/show/$title/${d_date}_${showhost}_Info.txt"
 		fi
-		if [ "$EXRETRY" != "0" ]
+
+		if [ -z "$url" ] || [ -z "$title" ] || [ -z "$startdate" ] || [ -z "$starttime" ]
 		then
-			echo -e "\n재시도 횟수: $EXRETRY / 최대 재시도 횟수: $MAXRETRY"
+			if [ "$MAXRETRY" = "0" ]
+			then
+				err_msg "\nexrefresh(): 정보 업데이트 실패, 스크립트 종료\n"
+				content_backup
+				exit 1
+			fi
+			if [ "$EXRETRY" != "0" ]
+			then
+				echo -e "\n재시도 횟수: $EXRETRY / 최대 재시도 횟수: $MAXRETRY"
+			fi
+			if [ -z "$EXRETRY" ] || [ "$EXRETRY" -lt "$MAXRETRY" ]
+			then
+				err_msg "정보 업데이트 실패, 재시도 합니다"
+				((EXRETRY++))
+			elif [ "$EXRETRY" -ge "$MAXRETRY" ]
+			then
+				err_msg "\nexrefresh(): 정보 업데이트 실패\n최대 재시도 횟수($MAXRETRY회) 도달, 스크립트 종료\n"
+				content_backup
+				exit 1
+			else
+				err_msg "\nERROR: exrefresh(): EXRETRY\n"
+				content_backup
+				exit 1
+			fi
+			msg "\nSTARTDATE: $startdate\nSTARTTIME: $starttime\nTITLE:$title\nURL:$url\n"
+			msg "Retrying...\n"
+			contentget
+			exrefresh
 		fi
-		if [ -z "$EXRETRY" ] || [ "$EXRETRY" -lt "$MAXRETRY" ]
-		then
-			err_msg "정보 업데이트 실패, 재시도 합니다"
-			((EXRETRY++))
-		elif [ "$EXRETRY" -ge "$MAXRETRY" ]
-		then
-			err_msg "\nexrefresh(): 정보 업데이트 실패\n최대 재시도 횟수($MAXRETRY회) 도달, 스크립트 종료\n"
-			content_backup
-			exit 1
-		else
-			err_msg "\nERROR: exrefresh(): EXRETRY\n"
-			content_backup
-			exit 1
-		fi
-		msg "\nSTARTDATE: $startdate\nSTARTTIME: $starttime\nTITLE:$title\nURL:$url\n"
-		msg "Retrying...\n"
-		contentget
-		exrefresh
+		EXRETRY=0
 	fi
 	alert_msg "Show Info variables refreshed"
-	EXRETRY=0
-	curl_c="curl --no-progress-meter"
-	wget_c="wget -q"
 }
 
 function timeupdate()
@@ -720,7 +732,7 @@ function onairwait()
 	while :
 	do
 		echo -e '방송이 시작되지 않았습니다\n'
-		timeupdate	
+		timeupdate
 		echo -e 'Time difference: '"$timecheck"' min'
 
 		if [ "$timecheck" -le -15 ]
@@ -729,6 +741,7 @@ function onairwait()
 			b_day=$(sed -n ${line}p "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.txt" | cut -d '"' -f 4)
 			err_msg "\nERROR: 시작시간과 15분 이상 차이 발생\n금일 방송 유무를 확인해주세요"
 			err_msg "\n쇼 이름: $title\n방송 시간: $b_day\n"
+			content_backup
 			exit 1
 		fi
 
@@ -767,37 +780,35 @@ function onairwait()
 					W_TIMER=1
 				else
 					err_msg "\nERROR: onairwait(): 1\n"
+					content_backup
 					exit 1
 				fi
 			else
 				err_msg "\nERROR: onairwait(): 2\n"
+				content_backup
 				exit 1
 			fi
 		else
 			err_msg "\nERROR: onairwait(): 3\n"
+			content_backup
 			exit 1
 		fi
 		# 방송 상태 확인
-		if [ "$onair" != "ONAIR" ]
+		if [ "$ONAIR" != "ONAIR" ]
 		then
-			echo -e "Live Status: ${YLW}$onair${NC}\n"
-		elif [ "$onair" = "ONAIR" ]
+			msg "Live Status: ${YLW}$ONAIR${NC}\n"
+		elif [ "$ONAIR" = "ONAIR" ]
 		then
-			echo -e "Live Status: ${GRN}$onair${NC}\n"
+			msg "Live Status: ${GRN}$ONAIR${NC}\n"
 			info_msg "content/livestatus 불러오기 완료\n"
-			msg "3초 동안 대기 후 다운로드 합니다"
-			counter 3
-			contentget
-			exrefresh
-			timeupdate
 			break
-		elif [ -z "$onair" ]
+		elif [ -z "$ONAIR" ]
 		then
-			alert_msg "\nWARNING: onairwait(): onair returned null"
+			alert_msg "\nWARNING: onairwait(): Couldn't get show status"
 			alert_msg "Retrying...\n"
 		else
-			err_msg "\nUnknown Live Status: $onair"
-			err_msg "ERROR: onairwait(): onair\n"
+			err_msg "ERROR: onairwait(): 4\n"
+			content_backup
 			exit 1
 		fi
 	done
@@ -845,7 +856,7 @@ function main()
 		timeupdate
 	else
 		err_msg "\nERROR: CUSTIMER\n"
-		exit 1
+		exit 6
 	fi
 
 	if [ -n "$FORCE" ]
@@ -854,9 +865,9 @@ function main()
 		getstream
 	fi
 
-	if [ "$onair" != "ONAIR" ]
+	if [ "$ONAIR" != "ONAIR" ]
 	then
-		echo -e "Live Status: ${YLW}$onair${NC}\n"
+		msg "Live Status: ${YLW}$ONAIR${NC}\n"
 		onairwait
 		# 시작 시간이 됐을 경우
 		if [ "$hour$min$sec" -ge "$starttime" ]
@@ -888,22 +899,24 @@ function main()
 			getstream
 		else
 			err_msg "\nERROR: 1\n"
+			content_backup
 			exit 1
 		fi
-	elif [ "$onair" = "ONAIR" ]
+	elif [ "$ONAIR" = "ONAIR" ]
 	then
-		echo -e "Live Status: ${GRN}$onair${NC}\n"
+		msg "Live Status: ${GRN}$ONAIR${NC}\n"
 		info_msg "쇼가 시작됨\n"
 		SREASON=3
 		getstream
 	else
 		err_msg "ERROR: 2\n"
+		content_backup
 		exit 1
 	fi
 }
 
 ### SCRIPT START
-				
+
 get_parms "$@"
 script_init
 main
