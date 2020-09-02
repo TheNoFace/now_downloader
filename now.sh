@@ -33,7 +33,7 @@ else
 	NC=""
 fi
 
-NDV="1.2.3"
+NDV="1.2.4"
 BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
 
@@ -316,7 +316,8 @@ function script_init()
 		then
 			OPATH=$(cat .opath)
 			echo -e "\nOutput Path: ${YLW}${OPATH}${NC}"
-			echo -e "If you want to change output path, delete ${YLW}$PWD/.opath${NC} file or use -o option\n"
+			echo -e "If you want to change output path, delete ${YLW}$PWD/.opath${NC} file or use -o option"
+			dir_check
 		else
 			err_msg "\nERROR: script_init OPATH\n"
 			exit 5
