@@ -33,7 +33,7 @@ else
 	NC=""
 fi
 
-NDV="1.2.4"
+NDV="1.2.5"
 BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
 
@@ -531,42 +531,32 @@ function getstream()
 	fi
 	unset ypid pstatus
 	RETRY=0
-	info_msg "\n다운로드 완료, 3초 대기"
-	counter 3
+	info_msg "\n스트리밍 종료됨"
 
 	if [ -n "$N_PTIMETH" ]
 	then
 		alert_msg "스트리밍 길이를 확인하지 않습니다"
 		convert
 	else
-		ptime=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${OPATH}/show/$title/${FILENAME}.ts" | grep -o '^[^.]*')
-		echo -e "스트리밍 시간: $ptime초 / 스트리밍 정상 종료 기준: $PTIMETH초"
-		if [ "$ptime" -lt "$PTIMETH" ]
+		PTIME=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${OPATH}/show/$title/${FILENAME}.ts" | grep -o '^[^.]*')
+		msg "스트리밍 시간: $PTIME초 / 스트리밍 정상 종료 기준: $PTIMETH초"
+		if [ "$PTIME" -lt "$PTIMETH" ]
 		then
-			if [ -z "$sfailcheck" ]
-			then
-				err_msg "\n스트리밍이 정상 종료되지 않음, 15초 후 재시작"
-				sfailcheck=1
-				counter 15
-				contentget
-				exrefresh
-				timeupdate
-				getstream
-			elif [ -n "$sfailcheck" ]
-			then
-				info_msg "\n스트리밍이 정상 종료됨"
-				convert
-			else
-				err_msg "\nERROR: sfailcheck\n"
-				content_backup
-				exit 1
-			fi
-		elif [ "$ptime" -ge "$PTIMETH" ]
+			PTIMETH=$(expr $PTIMETH - $PTIME)
+			((S_RETRY++))
+			err_msg "\n스트리밍이 정상 종료되지 않음\n스트리밍 중단 횟수: $S_RETRY, 30초 후 재시작"
+			counter 30
+			contentget
+			exrefresh
+			timeupdate
+			getstream
+		elif [ "$PTIME" -ge "$PTIMETH" ]
 		then
-			info_msg "\n스트리밍이 정상 종료됨"
+			info_msg "\n스트리밍이 정상 종료됨\n스트리밍 중단 횟수: $S_RETRY"
+			unset S_RETRY
 			convert
 		else
-			err_msg "\nERROR: ptime/PTIMETH\n"
+			err_msg "\nERROR: PTIME/PTIMETH\n"
 			content_backup
 			exit 1
 		fi
@@ -575,29 +565,31 @@ function getstream()
 
 function convert()
 {
+	codec=$(ffprobe -v error -show_streams -select_streams a "${OPATH}/show/$title/${FILENAME}.ts" | grep -oP 'codec_name=\K[^+]*')
 	if [ "$vcheck" = 'true' ]
 	then
-		alert_msg "\n보이는 쇼 입니다\n"
-	fi
-	codec=$(ffprobe -v error -show_streams -select_streams a "${OPATH}/show/$title/${FILENAME}.ts" | grep -oP 'codec_name=\K[^+]*')
-	if [ "$codec" = 'mp3' ]
+		alert_msg "\nFound video stream, passed audio converting... ($codec)\n"
+	elif [ "$vcheck" != 'true' ]
 	then
-		msg "\nCodec: MP3, Saving into mp3 file\n"
-		ffmpeg -i "${OPATH}/show/$title/${FILENAME}.ts" -vn -c:a copy "${OPATH}/show/$title/${FILENAME}.mp3"
-		msg "\nConvert Complete: ${FILENAME}.mp3"
-	elif [ "$codec" = 'aac' ]
-	then
-		msg "\nCodec: AAC, Saving into m4a file\n"
-		ffmpeg -i "${OPATH}/show/$title/${FILENAME}.ts" -vn -c:a copy "${OPATH}/show/$title/${FILENAME}.m4a"
-		msg "\nConvert Complete: ${FILENAME}.m4a"
-	else
-		err_msg "\nERROR: Unidentified Codec ($codec)"
-		content_backup
-		exit 1
-	fi
-	if [ "$vcheck" != 'true' ] && [ -z "$KEEP" ]
-	then
-		rm "${OPATH}/show/$title/${FILENAME}.ts"
+		if [ "$codec" = 'mp3' ]
+		then
+			msg "\nCodec: MP3, Saving into mp3 file\n"
+			ffmpeg -i "${OPATH}/show/$title/${FILENAME}.ts" -vn -c:a copy "${OPATH}/show/$title/${FILENAME}.mp3"
+			msg "\nConvert Complete: ${FILENAME}.mp3"
+		elif [ "$codec" = 'aac' ]
+		then
+			msg "\nCodec: AAC, Saving into m4a file\n"
+			ffmpeg -i "${OPATH}/show/$title/${FILENAME}.ts" -vn -c:a copy "${OPATH}/show/$title/${FILENAME}.m4a"
+			msg "\nConvert Complete: ${FILENAME}.m4a"
+		else
+			err_msg "\nERROR: Unidentified Codec ($codec)"
+			content_backup
+			exit 1
+		fi
+		if [ -z "$KEEP" ]
+		then
+			rm "${OPATH}/show/$title/${FILENAME}.ts"
+		fi
 	fi
 
 	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus

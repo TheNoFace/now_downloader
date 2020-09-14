@@ -1,7 +1,7 @@
 # Now-Downloader
 
 Bash script to download streaming from [NAVER NOW](https://now.naver.com)   
-Version: 1.2.4
+Version: 1.2.5
 
 ### Required packages
 - bc
