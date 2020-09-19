@@ -33,7 +33,7 @@ else
 	NC=""
 fi
 
-NDV="1.2.5"
+NDV="1.2.6"
 BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
 
@@ -461,14 +461,14 @@ function contentget()
 
 function content_backup()
 {
-	mv "${OPATH}/content/${SHOW_ID}_${d_date}.content" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}.content"
-	mv "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}.livestatus"
-	mv "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.txt" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_LiveList.txt"
+	mv "${OPATH}/content/${SHOW_ID}_${d_date}.content" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_$CTIME.content"
+	mv "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_$CTIME.livestatus"
+	mv "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.txt" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_${CTIME}_LiveList.txt"
 }
 
 function getstream()
 {
-	echo "방송시간: $starttime / 현재: $hour$min$sec"
+	msg "방송시간: $starttime / 현재: $CTIME"
 	if [ "$vcheck" = 'true' ]
 	then
 		alert_msg "\n보이는 쇼 입니다"
@@ -545,6 +545,7 @@ function getstream()
 			PTIMETH=$(expr $PTIMETH - $PTIME)
 			((S_RETRY++))
 			err_msg "\n스트리밍이 정상 종료되지 않음\n스트리밍 중단 횟수: $S_RETRY, 30초 후 재시작"
+			content_backup
 			counter 30
 			contentget
 			exrefresh
@@ -678,6 +679,7 @@ function exrefresh()
 function timeupdate()
 {
 	d_date=$(date +'%y%m%d')
+	CTIME=$(date +'%H%M%S')
 	hour=$(date +'%H')
 	min=$(date +'%M')
 	sec=$(date +'%S')
@@ -686,9 +688,9 @@ function timeupdate()
 	timecheck=$(echo "($stimehr*60+$stimemin)-($hour*60+$min)" | bc -l)
 	if [ "$vcheck" = 'true' ]
 	then
-		FILENAME="${d_date}.NAVER NOW.$title.E$ep.${subject}_VID_$hour$min$sec"
+		FILENAME="${d_date}.NAVER NOW.$title.E$ep.${subject}_VID_$CTIME"
 	else
-		FILENAME="${d_date}.NAVER NOW.$title.E$ep.${subject}_$hour$min$sec"
+		FILENAME="${d_date}.NAVER NOW.$title.E$ep.${subject}_$CTIME"
 	fi
 	FILENAME=${FILENAME//'/'/' '}
 	FILENAME=${FILENAME//'%'/'%%'}
@@ -744,7 +746,7 @@ function onairwait()
 		exrefresh
 		timeupdate
 		echo -e '방송일  : '"$startdate"' / 오늘: '"${d_date}"
-		echo '방송시간: '"$starttime"' / 현재: '"$hour$min$sec"
+		msg "방송시간: $starttime / 현재: $CTIME"
 		if [ "$vcheck" = 'true' ]
 		then
 			alert_msg "\n보이는 쇼 입니다"
@@ -831,7 +833,7 @@ function main()
 	fi
 
 	echo "방송일  : $startdate / 오늘: ${d_date}"
-	echo -e "방송시간: $starttime / 현재: $hour$min$sec"
+	msg "방송시간: $starttime / 현재: $CTIME"
 	echo -e "$title E$ep $subject\n"
 
 	if [ -n "$CUSTIMER" ]
@@ -863,27 +865,27 @@ function main()
 		msg "Live Status: ${YLW}$ONAIR${NC}\n"
 		onairwait
 		# 시작 시간이 됐을 경우
-		if [ "$hour$min$sec" -ge "$starttime" ]
+		if [ "$CTIME" -ge "$starttime" ]
 		then
 			info_msg "쇼가 시작됨\n"
 			SREASON=1
 			getstream
 		# 시작 시간이 안됐을 경우
-		elif [ "$hour$min$sec" -lt "$starttime" ]
+		elif [ "$CTIME" -lt "$starttime" ]
 		then
 			alert_msg "쇼가 아직 시작되지 않음\n"
 			while :
 			do
-				echo '방송시간: '"$starttime"' / 현재: '"$hour$min$sec"
-				echo -e '\n대기 중...('"$hour$min$sec"')'
+				msg "방송시간: $starttime / 현재: $CTIME"
+				msg "\n대기 중...($CTIME)"
 				sleep 1
 				contentget
 				exrefresh
 				timeupdate
 				# 시작 시간 확인
-				if [ "$hour$min$sec" -ge "$starttime" ]
+				if [ "$CTIME" -ge "$starttime" ]
 				then
-					echo '방송시간: '"$starttime"' / 현재: '"$hour$min$sec"
+					msg "방송시간: $starttime / 현재: $CTIME"
 					info_msg "쇼가 시작됨\n"
 					break
 				fi
