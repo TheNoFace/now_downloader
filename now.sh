@@ -12,6 +12,8 @@
 # 200531) 방송 시각과 현재 시각 차이가 20분 이상이면 (시각차이-20)분 sleep
 # 200812) 방송 요일 구해서 금일 방송이 아니라면 자동 custimer
 # 200829) onairwait 대기 중 24시 넘어가면 Time Difference +24시간 재설정
+# 200926) 시간 관련 모두 UTC 시간 체계로 변경
+# 201015) 시간 기반(PTIMETH) 스트리밍 중단 확인 방식 -> 파일 크기 변화 감지 방식으로 변경
 #
 #------------------------------------------------------------------
 
@@ -33,7 +35,7 @@ else
 	NC=""
 fi
 
-NDV="1.2.6"
+NDV="1.3.0"
 BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
 
@@ -56,6 +58,7 @@ VERB=""
 CTRETRY="0"
 RETRY="0"
 EXRETRY="0"
+S_RETRY="0"
 
 ### VALIDATOR
 
@@ -188,7 +191,7 @@ Options:
                               Default is set to 10 (times)
   -dr | --dretry              Disable retries (same as -r 0)
   -t  | --ptimeth [seconds]   Failcheck threshold if the stream has ended abnormally
-                              Default is set to 3300 (seconds)
+                              Default is set to 3200 (seconds)
   -dt | --dptime              Disable failcheck threshold
   -c  | --custimer [seconds]  Custom sleep timer before starting script"
 	alert_msg "                              WARNING: Mandatory if today is not the broadcasting day"
@@ -356,7 +359,7 @@ function script_init()
 	then
 		if [ -z "$PTIMETH" ]
 		then
-			PTIMETH="3300"
+			PTIMETH="3200"
 			alert_msg "Failcheck threshold set to default (${PTIMETH}s)"
 		else
 			alert_msg "Failcheck threshold set to ${PTIMETH}s"
@@ -463,7 +466,10 @@ function content_backup()
 {
 	mv "${OPATH}/content/${SHOW_ID}_${d_date}.content" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_$CTIME.content"
 	mv "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_$CTIME.livestatus"
-	mv "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.txt" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_${CTIME}_LiveList.txt"
+	if [ -e "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.txt" ]
+	then
+		mv "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.txt" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_${CTIME}_LiveList.txt"
+	fi
 }
 
 function getstream()
@@ -531,7 +537,7 @@ function getstream()
 	fi
 	unset ypid pstatus
 	RETRY=0
-	info_msg "\n스트리밍 종료됨"
+	msg "\n스트리밍 종료됨"
 
 	if [ -n "$N_PTIMETH" ]
 	then
@@ -544,7 +550,8 @@ function getstream()
 		then
 			PTIMETH=$(expr $PTIMETH - $PTIME)
 			((S_RETRY++))
-			err_msg "\n스트리밍이 정상 종료되지 않음\n스트리밍 중단 횟수: $S_RETRY, 30초 후 재시작"
+			err_msg "\n스트리밍이 정상 종료되지 않음"
+			msg "스트리밍 중단 횟수: $S_RETRY, 30초 후 재시작"
 			content_backup
 			counter 30
 			contentget
@@ -553,7 +560,8 @@ function getstream()
 			getstream
 		elif [ "$PTIME" -ge "$PTIMETH" ]
 		then
-			info_msg "\n스트리밍이 정상 종료됨\n스트리밍 중단 횟수: $S_RETRY"
+			info_msg "\n스트리밍이 정상 종료됨"
+			msg "스트리밍 중단 횟수: $S_RETRY"
 			unset S_RETRY
 			convert
 		else
@@ -569,17 +577,18 @@ function convert()
 	codec=$(ffprobe -v error -show_streams -select_streams a "${OPATH}/show/$title/${FILENAME}.ts" | grep -oP 'codec_name=\K[^+]*')
 	if [ "$vcheck" = 'true' ]
 	then
-		alert_msg "\nFound video stream, passed audio converting... ($codec)\n"
+		alert_msg "\nFound video stream, passed audio converting... ($codec)"
+		msg "Download Complete: ${FILENAME}.ts"
 	elif [ "$vcheck" != 'true' ]
 	then
 		if [ "$codec" = 'mp3' ]
 		then
-			msg "\nCodec: MP3, Saving into mp3 file\n"
+			msg "\nCodec: MP3, Saving into mp3 file"
 			ffmpeg -i "${OPATH}/show/$title/${FILENAME}.ts" -vn -c:a copy "${OPATH}/show/$title/${FILENAME}.mp3"
 			msg "\nConvert Complete: ${FILENAME}.mp3"
 		elif [ "$codec" = 'aac' ]
 		then
-			msg "\nCodec: AAC, Saving into m4a file\n"
+			msg "\nCodec: AAC, Saving into m4a file"
 			ffmpeg -i "${OPATH}/show/$title/${FILENAME}.ts" -vn -c:a copy "${OPATH}/show/$title/${FILENAME}.m4a"
 			msg "\nConvert Complete: ${FILENAME}.m4a"
 		else
@@ -622,16 +631,15 @@ function exrefresh()
 	else
 		url=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'liveStreamUrl":"\K[^"]+')
 	fi
-	startdate=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'startDatetime":"20\K[^T]+')
-	starttime=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'startDatetime":"\K[^"]+' | grep -oP 'T\K[^.+]+')
+	ORI_DATE=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'startDatetime":"\K[^"]+' | xargs -i date -d {} +%s) # Seconds since 1970-01-01 00:00:00 UTC
+	startdate=$(date -d @$ORI_DATE +'%y%m%d')
+	starttime=$(date -d @$ORI_DATE +'%H%M%S')
 	subject=$(jq '.contentList[].title.text' "${OPATH}/content/${SHOW_ID}_${d_date}.content")
 	des=$(jq -r '.contentList[].description.text' "${OPATH}/content/${SHOW_ID}_${d_date}.content")
 	ep=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.content" | grep -oP '"count":"\K[^회"]+')
 	ONAIR=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP ${SHOW_ID}'","status":"\K[^"]+') # READY | END | ONAIR
 
 	renamer "$subject" subject
-	startdate=${startdate//'-'/}
-	starttime=${starttime//':'/}
 
 	if [ -z "$G_USR" ]
 	then
@@ -680,12 +688,7 @@ function timeupdate()
 {
 	d_date=$(date +'%y%m%d')
 	CTIME=$(date +'%H%M%S')
-	hour=$(date +'%H')
-	min=$(date +'%M')
-	sec=$(date +'%S')
-	stimehr=$(expr substr "$starttime" 1 2)
-	stimemin=$(expr substr "$starttime" 3 2)
-	timecheck=$(echo "($stimehr*60+$stimemin)-($hour*60+$min)" | bc -l)
+	TIMECHECK=$(echo "($(date -d @$ORI_DATE +%H)*60+$(date -d @$ORI_DATE +%M))-($(date +%H)*60+$(date +%M))" | bc -l)
 	if [ "$vcheck" = 'true' ]
 	then
 		FILENAME="${d_date}.NAVER NOW.$title.E$ep.${subject}_VID_$CTIME"
@@ -728,14 +731,14 @@ function onairwait()
 	do
 		echo -e '방송이 시작되지 않았습니다\n'
 		timeupdate
-		echo -e 'Time difference: '"$timecheck"' min'
+		echo -e 'Time difference: '"$TIMECHECK"' min'
 
-		if [ "$timecheck" -le -15 ]
+		if [ "$TIMECHECK" -le -15 ]
 		then
 			line=$(expr $(grep -n '"contentId": "'${SHOW_ID}'"' "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.txt" | cut -d : -f 1) + 3)
 			b_day=$(sed -n ${line}p "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.txt" | cut -d '"' -f 4)
 			err_msg "\nERROR: 시작시간과 15분 이상 차이 발생\n금일 방송 유무를 확인해주세요"
-			err_msg "\n쇼 이름: $title\n방송 시간: $b_day\n"
+			err_msg "\n쇼 이름: $title\n방송 시간: $b_day (KST)\n"
 			content_backup
 			exit 1
 		fi
@@ -752,25 +755,25 @@ function onairwait()
 			alert_msg "\n보이는 쇼 입니다"
 		fi
 		echo -e "\n$title E$ep $subject\n$url\n"
-		if [ "$timecheck" -ge 65 ]
+		if [ "$TIMECHECK" -ge 65 ]
 		then
 			W_TIMER=3600
 		# 시작 시간이 65분 미만 차이
-		elif [ "$timecheck" -lt 65 ]
+		elif [ "$TIMECHECK" -lt 65 ]
 		then
 			# 시작 시간이 12분 초과 차이
-			if [ "$timecheck" -gt 12 ]
+			if [ "$TIMECHECK" -gt 12 ]
 			then
 				W_TIMER=600
 			# 시작 시간이 12분 이하 차이
-			elif [ "$timecheck" -le 12 ]
+			elif [ "$TIMECHECK" -le 12 ]
 			then
 				# 시작 시간이 3분 초과 차이
-				if [ "$timecheck" -gt 3 ]
+				if [ "$TIMECHECK" -gt 3 ]
 				then
 					W_TIMER=60
 				# 시작 시간이 3분 이하 차이
-				elif [ "$timecheck" -le 3 ]
+				elif [ "$TIMECHECK" -le 3 ]
 				then
 					W_TIMER=1
 				else

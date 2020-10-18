@@ -1,12 +1,12 @@
 # Now-Downloader
 
 Bash script to download streaming from [NAVER NOW](https://now.naver.com)   
-Version: 1.2.6
+Version: 1.3.0
 
 ### Required packages
 - bc
-- jq
-- youtube-dl
+- [jq](https://stedolan.github.io/jq/)
+- [youtube-dl](http://ytdl-org.github.io/youtube-dl/)
 - ffmpeg
 
 ### How to use
@@ -29,7 +29,7 @@ Options:
                               Default is set to 10 (times)
   -dr | --dretry              Disable retries (same as -r 0)
   -t  | --ptimeth [seconds]   Failcheck threshold if the stream has ended abnormally
-                              Default is set to 3300 (seconds)
+                              Default is set to 3200 (seconds)
   -dt | --dptime              Disable failcheck threshold
   -c  | --custimer [seconds]  Custom sleep timer before starting script
                               WARNING: Mandatory if today is not the broadcasting day
