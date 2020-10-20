@@ -12,7 +12,6 @@
 # 200531) 방송 시각과 현재 시각 차이가 20분 이상이면 (시각차이-20)분 sleep
 # 200812) 방송 요일 구해서 금일 방송이 아니라면 자동 custimer
 # 200829) onairwait 대기 중 24시 넘어가면 Time Difference +24시간 재설정
-# 201015) 시간 기반(PTIMETH) 스트리밍 중단 확인 방식 -> 파일 크기 변화 감지 방식으로 변경
 # 201018) onairwait(): TIMECHECK의 60% 이상 분단위 sleep
 # 201018) Verbose 모드에서만 표시할 메세지 정리
 # 201018) Log 내재화
@@ -37,7 +36,7 @@ else
 	NC=""
 fi
 
-NDV="1.3.1"
+NDV="1.3.2"
 BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
 
@@ -81,6 +80,7 @@ function err_msg()
 {
 	if is_not_empty "$1"
 	then
+		timelog
 		echo -e "${RED}$1${NC}"
 	fi
 }
@@ -89,6 +89,7 @@ function alert_msg()
 {
 	if is_not_empty "$1"
 	then
+		timelog
 		echo -e "${YLW}$1${NC}"
 	fi
 }
@@ -97,6 +98,7 @@ function info_msg()
 {
 	if is_not_empty "$1"
 	then
+		timelog
 		echo -e "${GRN}$1${NC}"
 	fi
 }
@@ -105,6 +107,7 @@ function msg()
 {
 	if is_not_empty "$1"
 	then
+		timelog
 		echo -e "$1"
 	fi
 }
@@ -345,7 +348,6 @@ function script_init()
 		then
 			alert_msg "Maximum retry set to default ($MAXRETRYSET times)"
 			MAXRETRY=$MAXRETRYSET
-			echo "maxretry $MAXRETRY / maxretryset $MAXRETRYSET"
 		else
 			alert_msg "Maximum retry set to $MAXRETRY times"
 		fi
@@ -353,14 +355,12 @@ function script_init()
 	then
 		MAXRETRY=0
 		alert_msg "Retry Disabled"
-		echo "maxretry $MAXRETRY / maxretryset $MAXRETRYSET"
 	fi
 
 	if [ -z $CHKINT ]
 	then
 		alert_msg "Stream status check timer set to default ($CHKINTSET seconds)"
 		CHKINT=$CHKINTSET
-		echo "chkint $CHKINT / chkintset $CHKINTSET"
 	else
 		alert_msg "Stream status check timer set to $CHKINT seconds"
 	fi
@@ -488,7 +488,7 @@ function getstream()
 	#-ERROR-CHECK------------------------------------------------------
 	$youtube_c --hls-use-mpegts --no-part "$url" --output "${OPATH}/show/$title/${FILENAME}.ts" & YPID=$!
 
-	msg "[$(date +'%x %T')] Download Started, checking stream status every ${YLW}$CHKINT${NC} seconds"
+	msg "$TIMELOG Download Started, checking stream status every ${YLW}$CHKINT${NC} seconds"
 	sleep 10 # wait for ffmpeg to start
 	FPID=$(ps --ppid $YPID | awk 'FNR == 2 {print $1}')
 	PIDS=($YPID $FPID)
@@ -498,11 +498,12 @@ function getstream()
 		INITSIZE=$(wc -c "${OPATH}/show/$title/${FILENAME}.ts" | cut -d ' ' -f 1)
 		sleep $CHKINT
 		POSTSIZE=$(wc -c "${OPATH}/show/$title/${FILENAME}.ts" | cut -d ' ' -f 1)
-		msg "[$(date +'%x %T')] INIT: ${YLW}$INITSIZE${NC} Bytes / POST: ${GRN}$POSTSIZE${NC} Bytes"
+		msg " "; tput cuu1; tput el # WTF?
+		msg "$TIMELOG INIT: ${YLW}$INITSIZE${NC} Bytes / POST: ${GRN}$POSTSIZE${NC} Bytes"
 
 		$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
 		ONAIR=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP ${SHOW_ID}'","status":"\K[^"]+')
-		msg "[$(date +'%x %T')] Show Status: ${GRN}$ONAIR${NC}"
+		msg "$TIMELOG Show Status: ${GRN}$ONAIR${NC}"
 
 		if [ $ONAIR = 'ONAIR' ]
 		then
@@ -516,16 +517,39 @@ function getstream()
 				then
 					tput cud 2
 				fi
-				err_msg "$CHKINT초 동안 다운로드 중단됨, 다시 시도합니다\n"
-				kill ${PIDS[@]}
-				contentget
-				exrefresh
-				timeupdate
-				getstream
+				if [ "$MAXRETRY" = "0" ]
+				then
+					err_msg "\n$TIMELOG getstream(): 다운로드 실패, 스크립트 종료\n"
+					content_backup
+					exit 1
+				fi
+				if [ "$RETRY" != "0" ]
+				then
+					msg "\n$TIMELOG 재시도 횟수: $RETRY / 최대 재시도 횟수: $MAXRETRY"
+				fi
+				if [ -z "$RETRY" ] || [ "$RETRY" -lt "$MAXRETRY" ]
+				then
+					((RETRY++))
+					err_msg "$TIMELOG $CHKINT초 동안 다운로드 중단됨, 다시 시도합니다\n"
+					kill ${PIDS[@]}
+					contentget
+					exrefresh
+					timeupdate
+					getstream
+				elif [ "$RETRY" -ge "$MAXRETRY" ]
+				then
+					err_msg "\n$TIMELOG getstream(): 다운로드 실패\n최대 재시도 횟수($MAXRETRY회) 도달, 스크립트 종료\n"
+					content_backup
+					exit 1
+				else
+					err_msg "\n$TIMELOG ERROR: getstream()\n"
+					content_backup
+					exit 1
+				fi
 			fi
 		elif [ $ONAIR != 'ONAIR' ]
 		then
-			msg "[$(date +'%x %T')] 스트리밍 종료됨"
+			msg "$TIMELOG 스트리밍 종료됨, 총 재시도 횟수: $RETRY"
 			break
 		fi
 	done
