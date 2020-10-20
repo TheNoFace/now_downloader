@@ -1,9 +1,12 @@
-# Now-Downloader
+# Now Downloader
 
 Bash script to download streaming from [NAVER NOW](https://now.naver.com)   
-Version: 1.3.0
+Version: 1.3.1
 
 ### Required packages
+
+If you want to run this script using crontab, then make sure you can run below commands in crontab. (not local)
+
 - bc
 - [jq](https://stedolan.github.io/jq/)
 - [youtube-dl](http://ytdl-org.github.io/youtube-dl/)
@@ -26,11 +29,10 @@ Options:
   -o  | --opath <dir>         Overrides output path to check if it's been set before
   -dc | --dcont               Do not check integrity of content/livestatus files in content folder
   -r  | --maxretry [number]   Maximum retries if download fails
-                              Default is set to 10 (times)
+                              Default is set to 10 times
   -dr | --dretry              Disable retries (same as -r 0)
-  -t  | --ptimeth [seconds]   Failcheck threshold if the stream has ended abnormally
-                              Default is set to 3200 (seconds)
-  -dt | --dptime              Disable failcheck threshold
+  -t  | --chkint [seconds]    Check stream status if it has ended abnormally by checking file size
+                              Default is set to 60 seconds
   -c  | --custimer [seconds]  Custom sleep timer before starting script
                               WARNING: Mandatory if today is not the broadcasting day
 Notes:
@@ -38,15 +40,14 @@ Notes:
   - Disabling flags priors than setting flags
 
 Example:
-* now.sh -i 495 -o /home/ubuntu/now -r 100 -t 3000 -c 86400
+* now.sh -i 495 -o /home/ubuntu/now -r 100 -t 30 -c 86400
   - Override output directory to /home/ubuntu/now
   - Wait 86400 seconds (24hr) before starting this script
   - Download #495 show
   - Retries 100 times if download fails
-  - Retries if total stream time is less than 3000 seconds
-* now.sh -i 495 -f -dr -dt -k
+  - Check stream status for every 30 seconds
+* now.sh -i 495 -f -dr -k
   - Do not retry download even if download fails
-  - Do not check stream duration
   - Download #495 show immediately without checking time
   - Do not delete original audio stream file after download finishes
 ```

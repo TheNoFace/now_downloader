@@ -12,8 +12,10 @@
 # 200531) 방송 시각과 현재 시각 차이가 20분 이상이면 (시각차이-20)분 sleep
 # 200812) 방송 요일 구해서 금일 방송이 아니라면 자동 custimer
 # 200829) onairwait 대기 중 24시 넘어가면 Time Difference +24시간 재설정
-# 200926) 시간 관련 모두 UTC 시간 체계로 변경
 # 201015) 시간 기반(PTIMETH) 스트리밍 중단 확인 방식 -> 파일 크기 변화 감지 방식으로 변경
+# 201018) onairwait(): TIMECHECK의 60% 이상 분단위 sleep
+# 201018) Verbose 모드에서만 표시할 메세지 정리
+# 201018) Log 내재화
 #
 #------------------------------------------------------------------
 
@@ -35,7 +37,7 @@ else
 	NC=""
 fi
 
-NDV="1.3.0"
+NDV="1.3.1"
 BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
 
@@ -47,10 +49,9 @@ FORCE=""
 KEEP=""
 OPATH_I=""
 ITG_CHECK=""
-MAXRETRY=""
 N_RETRY=""
-PTIMETH=""
-N_PTIMETH=""
+MAXRETRYSET=10
+CHKINTSET=60
 CUSTIMER=""
 SREASON=""
 VERB=""
@@ -108,6 +109,11 @@ function msg()
 	fi
 }
 
+function timelog()
+{
+	TIMELOG=$(echo "[$(date +'%x %T')]")
+}
+
 ### FUNCTION STARTS
 
 function get_parms()
@@ -133,10 +139,8 @@ function get_parms()
 				MAXRETRY="$2" ; shift ; shift ;;
 			-dr|--dretry)
 				N_RETRY=1 ; shift ;;
-			-t|--ptimeth)
-				PTIMETH="$2" ; shift ; shift ;;
-			-dt|--dptime)
-				N_PTIMETH=1 ; shift ;;
+			-t|--chkint)
+				CHKINT="$2" ; shift ; shift ;;
 			-c|--custimer)
 				CUSTIMER="$2" ; shift ; shift ;;
 			-vb|--verbose)
@@ -188,11 +192,10 @@ Options:
   -o  | --opath <dir>         Overrides output path to check if it's been set before
   -dc | --dcont               Do not check integrity of content/livestatus files in content folder
   -r  | --maxretry [number]   Maximum retries if download fails
-                              Default is set to 10 (times)
+                              Default is set to $MAXRETRYSET times
   -dr | --dretry              Disable retries (same as -r 0)
-  -t  | --ptimeth [seconds]   Failcheck threshold if the stream has ended abnormally
-                              Default is set to 3200 (seconds)
-  -dt | --dptime              Disable failcheck threshold
+  -t  | --chkint [seconds]    Check stream status if it has ended abnormally by checking file size
+                              Default is set to $CHKINTSET seconds
   -c  | --custimer [seconds]  Custom sleep timer before starting script"
 	alert_msg "                              WARNING: Mandatory if today is not the broadcasting day"
 
@@ -201,15 +204,14 @@ Options:
   - Disabling flags priors than setting flags
 
 Example:
-* $SCRIPT_NAME -i 495 -o /home/$USER/now -r 100 -t 3000 -c 86400
+* $SCRIPT_NAME -i 495 -o /home/$USER/now -r 100 -t 30 -c 86400
   - Override output directory to /home/$USER/now
   - Wait 86400 seconds (24hr) before starting this script
   - Download #495 show
   - Retries 100 times if download fails
-  - Retries if total stream time is less than 3000 seconds
-* $SCRIPT_NAME -i 495 -f -dr -dt -k
+  - Check stream status for every 30 seconds
+* $SCRIPT_NAME -i 495 -f -dr -k
   - Do not retry download even if download fails
-  - Do not check stream duration
   - Download #495 show immediately without checking time
   - Do not delete original audio stream file after download finishes
 "
@@ -271,8 +273,12 @@ function script_init()
 	then
 		alert_msg "Verbose Mode"
 		wget_c="wget"
+		youtube_c="youtube-dl"
+		ffmpeg_c="ffmpeg"
 	else
 		wget_c="wget -q"
+		youtube_c="youtube-dl -q"
+		ffmpeg_c="ffmpeg -loglevel quiet"
 	fi
 
 	if [ -n "$FORCE" ]
@@ -283,17 +289,6 @@ function script_init()
 	if [ -n "$KEEP" ]
 	then
 		alert_msg "Keep original audio stream file after download has finished"
-	fi
-
-	if [ -n "$N_RETRY" ]
-	then
-		MAXRETRY=0
-		alert_msg "Retry Disabled"
-	fi
-
-	if [ -n "$N_PTIMETH" ]
-	then
-		alert_msg "Stream duration check Disabled"
 	fi
 
 	if [ -z "$CUSTIMER" ]
@@ -344,26 +339,30 @@ function script_init()
 	done
 	echo
 
-	if [ -z "$N_RETRY" ]
+	if [ -z $N_RETRY ]
 	then
-		if [ -z "$MAXRETRY" ]
+		if [ -z $MAXRETRY ]
 		then
-			MAXRETRY="10"
-			alert_msg "Maximum retry set to default ($MAXRETRY times)"
+			alert_msg "Maximum retry set to default ($MAXRETRYSET times)"
+			MAXRETRY=$MAXRETRYSET
+			echo "maxretry $MAXRETRY / maxretryset $MAXRETRYSET"
 		else
 			alert_msg "Maximum retry set to $MAXRETRY times"
 		fi
+	elif [ -n $N_RETRY ]
+	then
+		MAXRETRY=0
+		alert_msg "Retry Disabled"
+		echo "maxretry $MAXRETRY / maxretryset $MAXRETRYSET"
 	fi
 
-	if [ -z "$N_PTIMETH" ]
+	if [ -z $CHKINT ]
 	then
-		if [ -z "$PTIMETH" ]
-		then
-			PTIMETH="3200"
-			alert_msg "Failcheck threshold set to default (${PTIMETH}s)"
-		else
-			alert_msg "Failcheck threshold set to ${PTIMETH}s"
-		fi
+		alert_msg "Stream status check timer set to default ($CHKINTSET seconds)"
+		CHKINT=$CHKINTSET
+		echo "chkint $CHKINT / chkintset $CHKINTSET"
+	else
+		alert_msg "Stream status check timer set to $CHKINT seconds"
 	fi
 
 	if [ -n "$CUSTIMER" ]
@@ -371,7 +370,7 @@ function script_init()
 		alert_msg "Custom sleep timer set to ${CUSTIMER}s"
 	fi
 
-	if [ -z "$N_RETRY" ] || [ -z "$N_PTIMETH" ] || [ -n "$CUSTIMER" ]
+	if [ -z "$N_RETRY" ] || [ -n "$CUSTIMER" ]
 	then
 		echo # For better logging
 	fi
@@ -474,102 +473,63 @@ function content_backup()
 
 function getstream()
 {
+	if [ $RETRY = 0 ]
+	then
+		INFO=$(jq -r '.contentList[].description.text' "${OPATH}/content/${SHOW_ID}_${d_date}.content")
+		echo -e "Host: $showhost\nEP: $ep\n\n$subject\n\n$INFO" > "${OPATH}/show/$title/${d_date}_${showhost}_Info.txt"
+	fi
+
 	msg "방송시간: $starttime / 현재: $CTIME"
 	if [ "$vcheck" = 'true' ]
 	then
 		alert_msg "\n보이는 쇼 입니다"
 	fi
-	echo -e "\n$title E$ep $subject"
-	echo -e "${FILENAME}.ts\n$url\n"
+	msg "\n$title E$ep $subject\n${FILENAME}.ts\n$url\n"
 	#-ERROR-CHECK------------------------------------------------------
-	youtube-dl --hls-use-mpegts "$url" --output "${OPATH}/show/$title/${FILENAME}.ts" \
-	& ypid="$!"
+	$youtube_c --hls-use-mpegts --no-part "$url" --output "${OPATH}/show/$title/${FILENAME}.ts" & YPID=$!
 
-	echo -e "youtube-dl PID=${ypid}\n"
-	wait ${ypid}
-	pstatus="$?"
+	msg "[$(date +'%x %T')] Download Started, checking stream status every ${YLW}$CHKINT${NC} seconds"
+	sleep 10 # wait for ffmpeg to start
+	FPID=$(ps --ppid $YPID | awk 'FNR == 2 {print $1}')
+	PIDS=($YPID $FPID)
 
-	echo -e "\nPID: ${ypid} / Exit code: ${pstatus}"
-	#-ERROR-CHECK------------------------------------------------------
-	if [ "$pstatus" != 0 ]
-	then
-		if [ "$MAXRETRY" = "0" ]
-		then
-			err_msg "\ngetstream(): 다운로드 실패, 스크립트 종료\n"
-			content_backup
-			exit 1
-		fi
-		if [ "$RETRY" != "0" ]
-		then
-			echo -e "\n재시도 횟수: $RETRY / 최대 재시도 횟수: $MAXRETRY"
-		fi
-		if [ -z "$RETRY" ] || [ "$RETRY" -lt "$MAXRETRY" ]
-		then
-			alert_msg "\n다운로드 실패, 재시도 합니다\n"
-			((RETRY++))
-		elif [ "$RETRY" -ge "$MAXRETRY" ]
-		then
-			err_msg "\ngetstream(): 다운로드 실패\n최대 재시도 횟수($MAXRETRY회) 도달, 스크립트 종료\n"
-			content_backup
-			exit 1
-		else
-			err_msg "\nERROR: getstream(): MAXRETRY\n"
-			content_backup
-			exit 1
-		fi
-		contentget
-		exrefresh
-		timeupdate
-		getstream
-	elif [ "$pstatus" = 0 ]
-	then
-		if [ -z "$RETRY" ]
-		then
-			RETRY=0
-		fi
-		info_msg "\n다운로드 성공"
-		echo -e "\n총 재시도 횟수: $RETRY"
-	else
-		err_msg "\nyoutube-dl: exit code $pstatus"
-		err_msg "ERROR: gsretry()\n"
-		content_backup
-		exit 1
-	fi
-	unset ypid pstatus
-	RETRY=0
-	msg "\n스트리밍 종료됨"
+	while :
+	do
+		INITSIZE=$(wc -c "${OPATH}/show/$title/${FILENAME}.ts" | cut -d ' ' -f 1)
+		sleep $CHKINT
+		POSTSIZE=$(wc -c "${OPATH}/show/$title/${FILENAME}.ts" | cut -d ' ' -f 1)
+		msg "[$(date +'%x %T')] INIT: ${YLW}$INITSIZE${NC} Bytes / POST: ${GRN}$POSTSIZE${NC} Bytes"
 
-	if [ -n "$N_PTIMETH" ]
-	then
-		alert_msg "스트리밍 길이를 확인하지 않습니다"
-		convert
-	else
-		PTIME=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${OPATH}/show/$title/${FILENAME}.ts" | grep -o '^[^.]*')
-		msg "스트리밍 시간: $PTIME초 / 스트리밍 정상 종료 기준: $PTIMETH초"
-		if [ "$PTIME" -lt "$PTIMETH" ]
+		$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
+		ONAIR=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP ${SHOW_ID}'","status":"\K[^"]+')
+		msg "[$(date +'%x %T')] Show Status: ${GRN}$ONAIR${NC}"
+
+		if [ $ONAIR = 'ONAIR' ]
 		then
-			PTIMETH=$(expr $PTIMETH - $PTIME)
-			((S_RETRY++))
-			err_msg "\n스트리밍이 정상 종료되지 않음"
-			msg "스트리밍 중단 횟수: $S_RETRY, 30초 후 재시작"
-			content_backup
-			counter 30
-			contentget
-			exrefresh
-			timeupdate
-			getstream
-		elif [ "$PTIME" -ge "$PTIMETH" ]
+			if [ -t 1 ]
+			then
+				tput cuu 2
+			fi
+			if [ $INITSIZE == $POSTSIZE ]
+			then
+				if [ -t 1 ]
+				then
+					tput cud 2
+				fi
+				err_msg "$CHKINT초 동안 다운로드 중단됨, 다시 시도합니다\n"
+				kill ${PIDS[@]}
+				contentget
+				exrefresh
+				timeupdate
+				getstream
+			fi
+		elif [ $ONAIR != 'ONAIR' ]
 		then
-			info_msg "\n스트리밍이 정상 종료됨"
-			msg "스트리밍 중단 횟수: $S_RETRY"
-			unset S_RETRY
-			convert
-		else
-			err_msg "\nERROR: PTIME/PTIMETH\n"
-			content_backup
-			exit 1
+			msg "[$(date +'%x %T')] 스트리밍 종료됨"
+			break
 		fi
-	fi
+	done
+	convert
 }
 
 function convert()
@@ -578,19 +538,19 @@ function convert()
 	if [ "$vcheck" = 'true' ]
 	then
 		alert_msg "\nFound video stream, passed audio converting... ($codec)"
-		msg "Download Complete: ${FILENAME}.ts"
+		msg "Download Complete: ${OPATH}/show/$title/${FILENAME}.ts"
 	elif [ "$vcheck" != 'true' ]
 	then
 		if [ "$codec" = 'mp3' ]
 		then
 			msg "\nCodec: MP3, Saving into mp3 file"
-			ffmpeg -i "${OPATH}/show/$title/${FILENAME}.ts" -vn -c:a copy "${OPATH}/show/$title/${FILENAME}.mp3"
-			msg "\nConvert Complete: ${FILENAME}.mp3"
+			$ffmpeg_c -i "${OPATH}/show/$title/${FILENAME}.ts" -vn -c:a copy "${OPATH}/show/$title/${FILENAME}.mp3"
+			msg "Convert Complete: ${OPATH}/show/$title/${FILENAME}.mp3"
 		elif [ "$codec" = 'aac' ]
 		then
 			msg "\nCodec: AAC, Saving into m4a file"
-			ffmpeg -i "${OPATH}/show/$title/${FILENAME}.ts" -vn -c:a copy "${OPATH}/show/$title/${FILENAME}.m4a"
-			msg "\nConvert Complete: ${FILENAME}.m4a"
+			$ffmpeg_c -i "${OPATH}/show/$title/${FILENAME}.ts" -vn -c:a copy "${OPATH}/show/$title/${FILENAME}.m4a"
+			msg "Convert Complete: ${OPATH}/show/$title/${FILENAME}.m4a"
 		else
 			err_msg "\nERROR: Unidentified Codec ($codec)"
 			content_backup
@@ -635,7 +595,6 @@ function exrefresh()
 	startdate=$(date -d @$ORI_DATE +'%y%m%d')
 	starttime=$(date -d @$ORI_DATE +'%H%M%S')
 	subject=$(jq '.contentList[].title.text' "${OPATH}/content/${SHOW_ID}_${d_date}.content")
-	des=$(jq -r '.contentList[].description.text' "${OPATH}/content/${SHOW_ID}_${d_date}.content")
 	ep=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.content" | grep -oP '"count":"\K[^회"]+')
 	ONAIR=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP ${SHOW_ID}'","status":"\K[^"]+') # READY | END | ONAIR
 
@@ -643,11 +602,6 @@ function exrefresh()
 
 	if [ -z "$G_USR" ]
 	then
-		if [ -d "${OPATH}/show/$title" ]
-		then
-			echo -e "Host: $showhost\nEP: $ep\n\n$subject\n\n$des" > "${OPATH}/show/$title/${d_date}_${showhost}_Info.txt"
-		fi
-
 		if [ -z "$url" ] || [ -z "$title" ] || [ -z "$startdate" ] || [ -z "$starttime" ]
 		then
 			if [ "$MAXRETRY" = "0" ]
@@ -849,9 +803,6 @@ function main()
 	elif [ -z "$CUSTIMER" ]
 	then
 		echo -e "사용자가 설정한 시작 대기 타이머가 없음\n"
-		contentget
-		exrefresh
-		timeupdate
 	else
 		err_msg "\nERROR: CUSTIMER\n"
 		exit 6
