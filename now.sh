@@ -15,6 +15,8 @@
 # 201018) onairwait(): TIMECHECK의 60% 이상 분단위 sleep
 # 201018) Verbose 모드에서만 표시할 메세지 정리
 # 201018) Log 내재화
+# 201021) youtube-dl exit 코드 검출해서 Retry
+# 201021) onairwait에서 $STATUS만 refresh, ONAIR 상태가 되면 다시 full contentget
 #
 #------------------------------------------------------------------
 
@@ -36,7 +38,7 @@ else
 	NC=""
 fi
 
-NDV="1.3.2"
+NDV="1.3.3"
 BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
 
@@ -50,7 +52,7 @@ OPATH_I=""
 ITG_CHECK=""
 N_RETRY=""
 MAXRETRYSET=10
-CHKINTSET=60
+CHKINTSET=30
 CUSTIMER=""
 SREASON=""
 VERB=""
@@ -111,6 +113,8 @@ function msg()
 		echo -e "$1"
 	fi
 }
+
+### LOGGING
 
 function timelog()
 {
@@ -246,16 +250,16 @@ function script_init()
 	d_date=$(date +'%y%m%d')
 
 	for l in ${P_LIST[@]}
-	{
+	do
 		P=$(command -v $l)
 		if [ -z $P ]
 		then
 			NFOUND=(${NFOUND[@]} $l)
 			P_LIST_E=1
 		fi
-	}
+	done
 
-	if [ $P_LIST_E == 1 ]
+	if [ $P_LIST_E = 1 ]
 	then
 		print_banner
 		array=${NFOUND[@]}
@@ -383,11 +387,11 @@ function script_init()
 		total_user=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'cumulativeUserCount":\K[^}]+')
 
 		msg "\n$startdate $title by $showhost\n$subject"
-		if [ "$ONAIR" = "ONAIR" ]
+		if [ "$STATUS" = "ONAIR" ]
 		then
-			msg "방송 상태: $ONAIR\n접속자 수: $cur_user / 오늘 총 조회수: $total_user\n"
+			msg "방송 상태: $STATUS\n접속자 수: $cur_user / 오늘 총 조회수: $total_user\n"
 		else
-			msg "방송 상태: $ONAIR\n총 조회수: $total_user\n"
+			msg "방송 상태: $STATUS\n총 조회수: $total_user\n"
 		fi
 		exit 0
 	fi
@@ -457,7 +461,7 @@ function contentget()
 		fi
 		CTRETRY=0
 	else
-		alert_msg "Passed integrity check!"
+		alert_msg "$TIMELOG Passed integrity check!"
 	fi
 }
 
@@ -473,6 +477,8 @@ function content_backup()
 
 function getstream()
 {
+	SREASON="$1"
+
 	if [ $RETRY = 0 ]
 	then
 		INFO=$(jq -r '.contentList[].description.text' "${OPATH}/content/${SHOW_ID}_${d_date}.content")
@@ -492,26 +498,30 @@ function getstream()
 	sleep 10 # wait for ffmpeg to start
 	FPID=$(ps --ppid $YPID | awk 'FNR == 2 {print $1}')
 	PIDS=($YPID $FPID)
+	# echo "YPID: $YPID / FPID: $FPID"
 
 	while :
 	do
 		INITSIZE=$(wc -c "${OPATH}/show/$title/${FILENAME}.ts" | cut -d ' ' -f 1)
 		sleep $CHKINT
 		POSTSIZE=$(wc -c "${OPATH}/show/$title/${FILENAME}.ts" | cut -d ' ' -f 1)
-		msg " "; tput cuu1; tput el # WTF?
+		# msg " "; tput cuu1; tput el # WTF?
 		msg "$TIMELOG INIT: ${YLW}$INITSIZE${NC} Bytes / POST: ${GRN}$POSTSIZE${NC} Bytes"
+		# sleep $CHKINT
+		get_status
+		if [ -t 1 ]
+		then
+			tput el
+		fi
+		msg "$TIMELOG Show Status: ${GRN}$STATUS${NC}"
 
-		$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
-		ONAIR=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP ${SHOW_ID}'","status":"\K[^"]+')
-		msg "$TIMELOG Show Status: ${GRN}$ONAIR${NC}"
-
-		if [ $ONAIR = 'ONAIR' ]
+		if [ $STATUS = 'ONAIR' ]
 		then
 			if [ -t 1 ]
 			then
 				tput cuu 2
 			fi
-			if [ $INITSIZE == $POSTSIZE ]
+			if [ $INITSIZE = $POSTSIZE ]
 			then
 				if [ -t 1 ]
 				then
@@ -535,7 +545,7 @@ function getstream()
 					contentget
 					exrefresh
 					timeupdate
-					getstream
+					getstream RETRY
 				elif [ "$RETRY" -ge "$MAXRETRY" ]
 				then
 					err_msg "\n$TIMELOG getstream(): 다운로드 실패\n최대 재시도 횟수($MAXRETRY회) 도달, 스크립트 종료\n"
@@ -547,7 +557,7 @@ function getstream()
 					exit 1
 				fi
 			fi
-		elif [ $ONAIR != 'ONAIR' ]
+		elif [ $STATUS != 'ONAIR' ]
 		then
 			msg "$TIMELOG 스트리밍 종료됨, 총 재시도 횟수: $RETRY"
 			break
@@ -620,7 +630,7 @@ function exrefresh()
 	starttime=$(date -d @$ORI_DATE +'%H%M%S')
 	subject=$(jq '.contentList[].title.text' "${OPATH}/content/${SHOW_ID}_${d_date}.content")
 	ep=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.content" | grep -oP '"count":"\K[^회"]+')
-	ONAIR=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP ${SHOW_ID}'","status":"\K[^"]+') # READY | END | ONAIR
+	STATUS=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP ${SHOW_ID}'","status":"\K[^"]+') # READY | END | ONAIR
 
 	renamer "$subject" subject
 
@@ -659,7 +669,7 @@ function exrefresh()
 		fi
 		EXRETRY=0
 	fi
-	alert_msg "Show Info variables refreshed"
+	alert_msg "$TIMELOG Show Info variables refreshed"
 }
 
 function timeupdate()
@@ -675,16 +685,19 @@ function timeupdate()
 	fi
 	FILENAME=${FILENAME//'/'/' '}
 	FILENAME=${FILENAME//'%'/'%%'}
-	alert_msg "Time variables refreshed\n"
+	alert_msg "$TIMELOG Time variables refreshed"
+}
+
+function get_status()
+{
+	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
+	STATUS=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP ${SHOW_ID}'","status":"\K[^"]+')
 }
 
 function counter()
 {
 	TIMER=$1
-	if [ "$TIMER" = 0 ]
-	then
-		echo
-	elif [ "$TIMER" -gt 0 ]
+	if [ "$TIMER" -gt 0 ]
 	then
 		msg "\n총 $TIMER초 동안 대기합니다"
 		while [ "$TIMER" -gt 0 ]
@@ -705,12 +718,10 @@ function counter()
 function onairwait()
 {
 	W_TIMER=0
-	while :
-	do
-		echo -e '방송이 시작되지 않았습니다\n'
-		timeupdate
-		echo -e 'Time difference: '"$TIMECHECK"' min'
+	FIRST=1
 
+	while [ "$STATUS" != "ONAIR" ]
+	do
 		if [ "$TIMECHECK" -le -15 ]
 		then
 			line=$(expr $(grep -n '"contentId": "'${SHOW_ID}'"' "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.txt" | cut -d : -f 1) + 3)
@@ -721,72 +732,45 @@ function onairwait()
 			exit 1
 		fi
 
-		counter "$W_TIMER"
-		echo -e 'content/livestatus 다시 불러오는 중...\n'
-		contentget
-		exrefresh
-		timeupdate
-		echo -e '방송일  : '"$startdate"' / 오늘: '"${d_date}"
-		msg "방송시간: $starttime / 현재: $CTIME"
-		if [ "$vcheck" = 'true' ]
+		get_status
+		if [ -t 1 ] && [ $FIRST != 1 ]
 		then
-			alert_msg "\n보이는 쇼 입니다"
+			for ((n = 1; n <= 7; n++))
+			do
+				tput cuu1; tput el
+			done
 		fi
-		echo -e "\n$title E$ep $subject\n$url\n"
+		timeupdate
+		msg "$TIMELOG Time difference: $TIMECHECK min"
+		if [ "$STATUS" = "ONAIR" ]
+		then
+			msg "$TIMELOG Live Status: ${GRN}$STATUS${NC}\n"
+			break
+		else
+			msg "$TIMELOG Live Status: ${YLW}$STATUS${NC}"
+		fi
+		FIRST=0
+
 		if [ "$TIMECHECK" -ge 65 ]
 		then
 			W_TIMER=3600
-		# 시작 시간이 65분 미만 차이
-		elif [ "$TIMECHECK" -lt 65 ]
+		elif [ "$TIMECHECK" -lt 65 ] # 시작 시간이 65분 미만 차이
 		then
-			# 시작 시간이 12분 초과 차이
-			if [ "$TIMECHECK" -gt 12 ]
+			if [ "$TIMECHECK" -gt 12 ] # 시작 시간이 12분 초과 차이
 			then
 				W_TIMER=600
-			# 시작 시간이 12분 이하 차이
-			elif [ "$TIMECHECK" -le 12 ]
+			elif [ "$TIMECHECK" -le 12 ] # 시작 시간이 12분 이하 차이
 			then
-				# 시작 시간이 3분 초과 차이
-				if [ "$TIMECHECK" -gt 3 ]
+				if [ "$TIMECHECK" -gt 2 ] # 시작 시간이 3분 초과 차이
 				then
 					W_TIMER=60
-				# 시작 시간이 3분 이하 차이
-				elif [ "$TIMECHECK" -le 3 ]
+				elif [ "$TIMECHECK" -le 2 ] # 시작 시간이 3분 이하 차이
 				then
 					W_TIMER=1
-				else
-					err_msg "\nERROR: onairwait(): 1\n"
-					content_backup
-					exit 1
 				fi
-			else
-				err_msg "\nERROR: onairwait(): 2\n"
-				content_backup
-				exit 1
 			fi
-		else
-			err_msg "\nERROR: onairwait(): 3\n"
-			content_backup
-			exit 1
 		fi
-		# 방송 상태 확인
-		if [ "$ONAIR" != "ONAIR" ]
-		then
-			msg "Live Status: ${YLW}$ONAIR${NC}\n"
-		elif [ "$ONAIR" = "ONAIR" ]
-		then
-			msg "Live Status: ${GRN}$ONAIR${NC}\n"
-			info_msg "content/livestatus 불러오기 완료\n"
-			break
-		elif [ -z "$ONAIR" ]
-		then
-			alert_msg "\nWARNING: onairwait(): Couldn't get show status"
-			alert_msg "Retrying...\n"
-		else
-			err_msg "ERROR: onairwait(): 4\n"
-			content_backup
-			exit 1
-		fi
+		counter "$W_TIMER"
 	done
 }
 
@@ -808,9 +792,9 @@ function main()
 
 	if [ "$vcheck" = 'true' ]
 	then
-		alert_msg "비디오 스트림 발견, 함께 다운로드 합니다\n"
+		alert_msg "\n비디오 스트림 발견, 함께 다운로드 합니다\n"
 	else
-		alert_msg "비디오 스트림 없음, 오디오만 다운로드 합니다\n"
+		alert_msg "\n비디오 스트림 없음, 오디오만 다운로드 합니다\n"
 	fi
 
 	echo "방송일  : $startdate / 오늘: ${d_date}"
@@ -824,67 +808,26 @@ function main()
 		contentget
 		exrefresh
 		timeupdate
-	elif [ -z "$CUSTIMER" ]
-	then
-		echo -e "사용자가 설정한 시작 대기 타이머가 없음\n"
-	else
-		err_msg "\nERROR: CUSTIMER\n"
-		exit 6
 	fi
 
 	if [ -n "$FORCE" ]
 	then
-		SREASON="FORCE"
-		getstream
+		getstream FORCE
 	fi
 
-	if [ "$ONAIR" != "ONAIR" ]
+	if [ "$STATUS" = "ONAIR" ]
 	then
-		msg "Live Status: ${YLW}$ONAIR${NC}\n"
-		onairwait
-		# 시작 시간이 됐을 경우
-		if [ "$CTIME" -ge "$starttime" ]
-		then
-			info_msg "쇼가 시작됨\n"
-			SREASON=1
-			getstream
-		# 시작 시간이 안됐을 경우
-		elif [ "$CTIME" -lt "$starttime" ]
-		then
-			alert_msg "쇼가 아직 시작되지 않음\n"
-			while :
-			do
-				msg "방송시간: $starttime / 현재: $CTIME"
-				msg "\n대기 중...($CTIME)"
-				sleep 1
-				contentget
-				exrefresh
-				timeupdate
-				# 시작 시간 확인
-				if [ "$CTIME" -ge "$starttime" ]
-				then
-					msg "방송시간: $starttime / 현재: $CTIME"
-					info_msg "쇼가 시작됨\n"
-					break
-				fi
-			done
-			SREASON=2
-			getstream
-		else
-			err_msg "\nERROR: 1\n"
-			content_backup
-			exit 1
-		fi
-	elif [ "$ONAIR" = "ONAIR" ]
-	then
-		msg "Live Status: ${GRN}$ONAIR${NC}\n"
+		msg "Live Status: ${GRN}$STATUS${NC}\n"
 		info_msg "쇼가 시작됨\n"
-		SREASON=3
-		getstream
+		getstream 1
 	else
-		err_msg "ERROR: 2\n"
-		content_backup
-		exit 1
+		onairwait
+		info_msg "쇼가 시작됨, 3초 후 다운로드 시작\n"
+		sleep 3 # To avoid unvalid URL
+		contentget
+		exrefresh
+		timeupdate
+		getstream 2
 	fi
 }
 
