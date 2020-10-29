@@ -15,8 +15,7 @@
 # 201018) onairwait(): TIMECHECK의 60% 이상 분단위 sleep
 # 201018) Verbose 모드에서만 표시할 메세지 정리
 # 201018) Log 내재화
-# 201021) youtube-dl exit 코드 검출해서 Retry
-# 201021) onairwait에서 $STATUS만 refresh, ONAIR 상태가 되면 다시 full contentget
+# 201028) get_info / get_list 추가
 #
 #------------------------------------------------------------------
 
@@ -38,7 +37,7 @@ else
 	NC=""
 fi
 
-NDV="1.3.3"
+NDV="1.3.4"
 BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
 
@@ -80,45 +79,46 @@ function is_empty()
 
 function err_msg()
 {
-	if is_not_empty "$1"
+	if [ "$1" = '-t' ] && is_not_empty "$2"
 	then
-		timelog
+		echo -e "${RED}[$(date +'%x %T')] $2${NC}"
+	elif is_not_empty "$1"
+	then
 		echo -e "${RED}$1${NC}"
 	fi
 }
 
 function alert_msg()
 {
-	if is_not_empty "$1"
+	if [ "$1" = '-t' ] && is_not_empty "$2"
 	then
-		timelog
+		echo -e "${YLW}[$(date +'%x %T')] $2${NC}"
+	elif is_not_empty "$1"
+	then
 		echo -e "${YLW}$1${NC}"
 	fi
 }
 
 function info_msg()
 {
-	if is_not_empty "$1"
+	if [ "$1" = '-t' ] && is_not_empty "$2"
 	then
-		timelog
+		echo -e "${GRN}[$(date +'%x %T')] $2${NC}"
+	elif is_not_empty "$1"
+	then
 		echo -e "${GRN}$1${NC}"
 	fi
 }
 
 function msg()
 {
-	if is_not_empty "$1"
+	if [ "$1" = '-t' ] && is_not_empty "$2"
 	then
-		timelog
+		echo -e "[$(date +'%x %T')] $2"
+	elif is_not_empty "$1"
+	then
 		echo -e "$1"
 	fi
-}
-
-### LOGGING
-
-function timelog()
-{
-	TIMELOG=$(echo "[$(date +'%x %T')]")
 }
 
 ### FUNCTION STARTS
@@ -211,12 +211,12 @@ Options:
   - Disabling flags priors than setting flags
 
 Example:
-* $SCRIPT_NAME -i 495 -o /home/$USER/now -r 100 -t 30 -c 86400
+* $SCRIPT_NAME -i 495 -o /home/$USER/now -r 100 -t 60 -c 86400
   - Override output directory to /home/$USER/now
   - Wait 86400 seconds (24hr) before starting this script
   - Download #495 show
   - Retries 100 times if download fails
-  - Check stream status for every 30 seconds
+  - Check stream status for every 60 seconds
 * $SCRIPT_NAME -i 495 -f -dr -k
   - Do not retry download even if download fails
   - Download #495 show immediately without checking time
@@ -284,7 +284,7 @@ function script_init()
 		ffmpeg_c="ffmpeg"
 	else
 		wget_c="wget -q"
-		youtube_c="youtube-dl -q"
+		youtube_c="youtube-dl -q --no-warnings"
 		ffmpeg_c="ffmpeg -loglevel quiet"
 	fi
 
@@ -389,7 +389,7 @@ function script_init()
 		msg "\n$startdate $title by $showhost\n$subject"
 		if [ "$STATUS" = "ONAIR" ]
 		then
-			msg "방송 상태: $STATUS\n접속자 수: $cur_user / 오늘 총 조회수: $total_user\n"
+			msg "방송 상태: ${RED}$STATUS${NC}\n접속자 수: $cur_user / 오늘 총 조회수: $total_user\n"
 		else
 			msg "방송 상태: $STATUS\n총 조회수: $total_user\n"
 		fi
@@ -461,7 +461,7 @@ function contentget()
 		fi
 		CTRETRY=0
 	else
-		alert_msg "$TIMELOG Passed integrity check!"
+		alert_msg "Passed integrity check!"
 	fi
 }
 
@@ -485,82 +485,113 @@ function getstream()
 		echo -e "Host: $showhost\nEP: $ep\n\n$subject\n\n$INFO" > "${OPATH}/show/$title/${d_date}_${showhost}_Info.txt"
 	fi
 
-	msg "방송시간: $starttime / 현재: $CTIME"
 	if [ "$vcheck" = 'true' ]
 	then
 		alert_msg "\n보이는 쇼 입니다"
 	fi
-	msg "\n$title E$ep $subject\n${FILENAME}.ts\n$url\n"
+	msg "\n방송시간: $starttime / 현재: $CTIME\n$title E$ep $subject\n${FILENAME}.ts\n$url\n"
 	#-ERROR-CHECK------------------------------------------------------
 	$youtube_c --hls-use-mpegts --no-part "$url" --output "${OPATH}/show/$title/${FILENAME}.ts" & YPID=$!
 
-	msg "$TIMELOG Download Started, checking stream status every ${YLW}$CHKINT${NC} seconds"
-	sleep 10 # wait for ffmpeg to start
+	msg -t "Waiting for youtube-dl to check URL..." && sleep 10
+	if [ "$(ps -p $YPID | awk 'FNR == 2 {print $4}')" != 'youtube-dl' ]
+	then
+		err_msg -t "INVALID URL, retrying...\n"
+		content_backup
+		contentget
+		exrefresh
+		timeupdate
+		((RETRY++))
+		getstream "URL_RETRY"
+	fi
+	#-ERROR-CHECK------------------------------------------------------
+
+	msg -t "Waiting for ffmpeg to start..." && sleep 10
 	FPID=$(ps --ppid $YPID | awk 'FNR == 2 {print $1}')
 	PIDS=($YPID $FPID)
-	# echo "YPID: $YPID / FPID: $FPID"
+	msg -t "Download Started, checking stream status every ${YLW}$CHKINT${NC} seconds\n"
 
 	while :
 	do
 		INITSIZE=$(wc -c "${OPATH}/show/$title/${FILENAME}.ts" | cut -d ' ' -f 1)
 		sleep $CHKINT
 		POSTSIZE=$(wc -c "${OPATH}/show/$title/${FILENAME}.ts" | cut -d ' ' -f 1)
-		# msg " "; tput cuu1; tput el # WTF?
-		msg "$TIMELOG INIT: ${YLW}$INITSIZE${NC} Bytes / POST: ${GRN}$POSTSIZE${NC} Bytes"
-		# sleep $CHKINT
+		if [ -t 1 ]
+		then
+			tput el
+		fi
+		msg -t "INIT: ${YLW}$INITSIZE${NC} Bytes / POST: ${GRN}$POSTSIZE${NC} Bytes"
 		get_status
 		if [ -t 1 ]
 		then
 			tput el
 		fi
-		msg "$TIMELOG Show Status: ${GRN}$STATUS${NC}"
 
-		if [ $STATUS = 'ONAIR' ]
+		if [ "$STATUS" = 'ONAIR' ]
 		then
+			msg -t "Show Status: ${RED}$STATUS${NC}"
 			if [ -t 1 ]
 			then
 				tput cuu 2
 			fi
-			if [ $INITSIZE = $POSTSIZE ]
+			if [ "$INITSIZE" = "$POSTSIZE" ]
 			then
 				if [ -t 1 ]
 				then
 					tput cud 2
 				fi
-				if [ "$MAXRETRY" = "0" ]
+				if [ "$(ps -p $YPID | awk 'FNR == 2 {print $4}')" = 'youtube-dl' ]
 				then
-					err_msg "\n$TIMELOG getstream(): 다운로드 실패, 스크립트 종료\n"
-					content_backup
-					exit 1
-				fi
-				if [ "$RETRY" != "0" ]
+					alert_msg -t "Download stalled, but youtube-dl is still alive!\n"
+				elif [ "$(ps -p $YPID | awk 'FNR == 2 {print $4}')" != 'youtube-dl' ]
 				then
-					msg "\n$TIMELOG 재시도 횟수: $RETRY / 최대 재시도 횟수: $MAXRETRY"
-				fi
-				if [ -z "$RETRY" ] || [ "$RETRY" -lt "$MAXRETRY" ]
-				then
-					((RETRY++))
-					err_msg "$TIMELOG $CHKINT초 동안 다운로드 중단됨, 다시 시도합니다\n"
-					kill ${PIDS[@]}
-					contentget
-					exrefresh
-					timeupdate
-					getstream RETRY
-				elif [ "$RETRY" -ge "$MAXRETRY" ]
-				then
-					err_msg "\n$TIMELOG getstream(): 다운로드 실패\n최대 재시도 횟수($MAXRETRY회) 도달, 스크립트 종료\n"
-					content_backup
-					exit 1
-				else
-					err_msg "\n$TIMELOG ERROR: getstream()\n"
-					content_backup
-					exit 1
+					if [ "$MAXRETRY" = "0" ]
+					then
+						echo
+						err_msg -t "getstream(): 다운로드 실패, 스크립트 종료\n"
+						content_backup
+						exit 1
+					fi
+					if [ "$RETRY" != "0" ]
+					then
+						echo
+						msg -t "재시도 횟수: $RETRY / 최대 재시도 횟수: $MAXRETRY"
+					fi
+					if [ -z "$RETRY" ] || [ "$RETRY" -lt "$MAXRETRY" ]
+					then
+						((RETRY++))
+						err_msg -t "$CHKINT초 동안 다운로드 중단됨, 다시 시도합니다\n"
+						kill ${PIDS[@]}
+						content_backup
+						contentget
+						exrefresh
+						timeupdate
+						getstream RETRY
+					elif [ "$RETRY" -ge "$MAXRETRY" ]
+					then
+						echo
+						err_msg -t "getstream(): 다운로드 실패\n최대 재시도 횟수($MAXRETRY회) 도달, 스크립트 종료\n"
+						content_backup
+						exit 1
+					else
+						echo
+						err_msg -t "ERROR: getstream(): RETRY($RETRY/$MAXRETRY)\n"
+						content_backup
+						exit 1
+					fi
 				fi
 			fi
-		elif [ $STATUS != 'ONAIR' ]
+		elif [ "$STATUS" != 'ONAIR' ]
 		then
-			msg "$TIMELOG 스트리밍 종료됨, 총 재시도 횟수: $RETRY"
-			break
+			if [ -z "$STATUS" ]
+			then
+				echo
+				alert_msg -t "WARNING: Invalid status, retrying..."
+			else
+				msg -t "Show Status: ${YLW}$STATUS${NC}"
+				msg -t "스트리밍 종료됨, 총 재시도 횟수: $RETRY"
+				break
+			fi
 		fi
 	done
 	convert
@@ -636,7 +667,7 @@ function exrefresh()
 
 	if [ -z "$G_USR" ]
 	then
-		if [ -z "$url" ] || [ -z "$title" ] || [ -z "$startdate" ] || [ -z "$starttime" ]
+		if [ -z "$url" ] || [ -z "$title" ] || [ -z "$startdate" ] || [ -z "$starttime" ] || [ -z "$STATUS" ]
 		then
 			if [ "$MAXRETRY" = "0" ]
 			then
@@ -669,7 +700,7 @@ function exrefresh()
 		fi
 		EXRETRY=0
 	fi
-	alert_msg "$TIMELOG Show Info variables refreshed"
+	alert_msg "Show Info variables refreshed"
 }
 
 function timeupdate()
@@ -685,7 +716,7 @@ function timeupdate()
 	fi
 	FILENAME=${FILENAME//'/'/' '}
 	FILENAME=${FILENAME//'%'/'%%'}
-	alert_msg "$TIMELOG Time variables refreshed"
+	alert_msg "Time variables refreshed"
 }
 
 function get_status()
@@ -741,13 +772,14 @@ function onairwait()
 			done
 		fi
 		timeupdate
-		msg "$TIMELOG Time difference: $TIMECHECK min"
+		msg -t "Time difference: $TIMECHECK min"
 		if [ "$STATUS" = "ONAIR" ]
 		then
-			msg "$TIMELOG Live Status: ${GRN}$STATUS${NC}\n"
+			msg -t "Live Status: ${RED}$STATUS${NC}\n"
+			unset FIRST
 			break
 		else
-			msg "$TIMELOG Live Status: ${YLW}$STATUS${NC}"
+			msg -t "Live Status: ${YLW}$STATUS${NC}"
 		fi
 		FIRST=0
 
@@ -817,8 +849,8 @@ function main()
 
 	if [ "$STATUS" = "ONAIR" ]
 	then
-		msg "Live Status: ${GRN}$STATUS${NC}\n"
-		info_msg "쇼가 시작됨\n"
+		msg "Live Status: ${RED}$STATUS${NC}\n"
+		info_msg "쇼가 시작됨"
 		getstream 1
 	else
 		onairwait
