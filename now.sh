@@ -730,18 +730,19 @@ function counter()
 	TIMER=$1
 	if [ "$TIMER" -gt 0 ]
 	then
-		msg "\n총 $TIMER초 동안 대기합니다"
+		echo
+		echo "$TIMER초 동안 대기합니다"
 		while [ "$TIMER" -gt 0 ]
 		do
-			echo "$TIMER초 남음"
-			sleep 1
 			if [ -t 1 ]
 			then
 				tput cuu1;tput el
+				echo "$TIMER초 동안 대기합니다"
 			fi
+			sleep 1
 			((TIMER--))
 		done
-		echo -e '\n'
+		echo
 	fi
 	unset TIMER
 }
@@ -766,7 +767,7 @@ function onairwait()
 		get_status
 		if [ -t 1 ] && [ $FIRST != 1 ]
 		then
-			for ((n = 1; n <= 7; n++))
+			for ((n = 1; n <= 6; n++))
 			do
 				tput cuu1; tput el
 			done
