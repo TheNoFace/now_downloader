@@ -15,7 +15,7 @@
 # 201018) onairwait(): TIMECHECK의 60% 이상 분단위 sleep
 # 201018) Verbose 모드에서만 표시할 메세지 정리
 # 201018) Log 내재화
-# 201028) get_info / get_list 추가
+# 201028) get_info 추가
 #
 #------------------------------------------------------------------
 
@@ -133,7 +133,7 @@ function get_parms()
 			-h|--help|-help)
 				print_help ; exit 0 ;;
 			-ls|--list)
-                get_list ; exit 0 ;;
+				get_list ; exit 0 ;;
 			-i|-id|--id)
 				SHOW_ID="$2" ; shift ; shift ;;
 			-f|--force)
@@ -494,11 +494,15 @@ function getstream()
 	fi
 	msg "\n방송시간: $starttime / 현재: $CTIME\n$title E$ep $subject\n${FILENAME}.ts\n$url\n"
 	#-ERROR-CHECK------------------------------------------------------
-	$youtube_c --hls-use-mpegts --no-part "$url" --output "${OPATH}/show/$title/${FILENAME}.ts" & YPID=$!
+	msg -t "Waiting for youtube-dl to check URL..."
+	$youtube_c -s "$url" & YPID=$!
+	wait $YPID; ExitCode=$?
 
-	msg -t "Waiting for youtube-dl to check URL..." && sleep 10
-	if [ "$(ps -p $YPID | awk 'FNR == 2 {print $4}')" != 'youtube-dl' ]
+	if [ $ExitCode = 0 ]
 	then
+		info_msg -t "Valid URL, Proceeding..."
+		$youtube_c --hls-use-mpegts --no-part "$url" --output "${OPATH}/show/$title/${FILENAME}.ts" & YPID=$!
+	else
 		err_msg -t "INVALID URL, retrying...\n"
 		content_backup
 		contentget
@@ -724,8 +728,7 @@ function timeupdate()
 
 function get_status()
 {
-	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
-	STATUS=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP ${SHOW_ID}'","status":"\K[^"]+')
+	STATUS=$(curl -s https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus | jq -r .[].status)
 }
 
 function counter()
@@ -858,8 +861,9 @@ function main()
 		getstream 1
 	else
 		onairwait
-		info_msg "쇼가 시작됨, 3초 후 다운로드 시작\n"
-		sleep 3 # To avoid unvalid URL
+		info_msg "쇼가 시작됨\n"
+		# info_msg "쇼가 시작됨, 3초 후 다운로드 시작\n"
+		# sleep 3 # To avoid unvalid URL
 		contentget
 		exrefresh
 		timeupdate
@@ -870,7 +874,7 @@ function main()
 function get_list()
 {
 	info_msg "\n$BANNER\n"
-    idlist=($(curl -s https://now.naver.com/api/nnow/v1/stream/livelist | jq -r '.liveList[] | (.contentId|tostring)'))
+	idlist=($(curl -s https://now.naver.com/api/nnow/v1/stream/livelist | jq -r '.liveList[] | (.contentId|tostring)'))
 	timelist=$(curl -s https://now.naver.com/api/nnow/v1/stream/livelist | jq '.liveList[] | .tobe')
 	IFS=$'\n' timelist=(${timelist})
 
@@ -890,7 +894,7 @@ function get_list()
 		else
 			if [ ${#id} = 2 ]
 			then
-	    		output=(${output[@]} "$id : $info (${timelist[$i]//'"'/''})")
+				output=(${output[@]} "$id : $info (${timelist[$i]//'"'/''})")
 			else
 				output=(${output[@]} "$id: $info (${timelist[$i]//'"'/''})")
 			fi
