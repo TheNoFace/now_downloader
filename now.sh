@@ -132,6 +132,8 @@ function get_parms()
 				print_banner ; exit 0 ;;
 			-h|--help|-help)
 				print_help ; exit 0 ;;
+			-ls|--list)
+                get_list ; exit 0 ;;
 			-i|-id|--id)
 				SHOW_ID="$2" ; shift ; shift ;;
 			-f|--force)
@@ -192,6 +194,7 @@ function print_help()
 Options:
   -v  | --version             Show program name and version
   -h  | --help                Show this help screen
+  -ls | --list                List every show's ID and it's title
   -u  | --user                Display current/total users of the show
   -vb | --verbose             Display wget download information
   -f  | --force               Start download immediately without any time checks
@@ -862,6 +865,48 @@ function main()
 		timeupdate
 		getstream 2
 	fi
+}
+
+function get_list()
+{
+	info_msg "\n$BANNER\n"
+    idlist=($(curl -s https://now.naver.com/api/nnow/v1/stream/livelist | jq -r '.liveList[] | (.contentId|tostring)'))
+	timelist=$(curl -s https://now.naver.com/api/nnow/v1/stream/livelist | jq '.liveList[] | .tobe')
+	IFS=$'\n' timelist=(${timelist})
+
+	i=0; n=1
+	for id in "${idlist[@]}"
+	do
+		echo -en "Updating list... ($n/${#idlist[@]})\r"
+		info=$(curl -s https://now.naver.com/api/nnow/v1/stream/${id}/content | jq -r '.contentList[] | .home.title.text')
+		if [ ${timelist[$i]} = '""' ]
+		then
+			if [ ${#id} = 2 ]
+			then
+				output=(${output[@]} "$id : $info (Unknown)")
+			else
+				output=(${output[@]} "$id: $info (Unknown)")
+			fi
+		else
+			if [ ${#id} = 2 ]
+			then
+	    		output=(${output[@]} "$id : $info (${timelist[$i]//'"'/''})")
+			else
+				output=(${output[@]} "$id: $info (${timelist[$i]//'"'/''})")
+			fi
+		fi
+		((i++)); ((n++))
+	done
+	unset n i
+
+	echo -e "\n"
+	n=1
+	for (( i=0; i<${#output[@]}; i++ ))
+	do
+		echo "[$n] ${output[$i]}"
+		((n++))
+	done
+	echo
 }
 
 ### SCRIPT START

@@ -22,6 +22,7 @@ Required:
 Options:
   -v  | --version             Show program name and version
   -h  | --help                Show this help screen
+  -ls | --list                List every show's ID and it's title
   -u  | --user                Display current/total users of the show
   -vb | --verbose             Display wget download information
   -f  | --force               Start download immediately without any time checks
