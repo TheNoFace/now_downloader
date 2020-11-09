@@ -16,6 +16,7 @@
 # 201018) Verbose 모드에서만 표시할 메세지 정리
 # 201018) Log 내재화
 # 201028) get_info 추가
+# 201109) getstream()에서 URL 확인 시 MAXRETRY 제한
 #
 #------------------------------------------------------------------
 
@@ -37,11 +38,11 @@ else
 	NC=""
 fi
 
-NDV="1.3.4"
+NDV="1.3.5-beta"
 BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
 
-P_LIST=(bc jq youtube-dl ffmpeg)
+P_LIST=(bc jq curl wget youtube-dl ffmpeg)
 P_LIST_E=0
 
 SHOW_ID=""
@@ -51,7 +52,7 @@ OPATH_I=""
 ITG_CHECK=""
 N_RETRY=""
 MAXRETRYSET=10
-CHKINTSET=30
+CHKINTSET=20
 CUSTIMER=""
 SREASON=""
 VERB=""
@@ -494,17 +495,16 @@ function getstream()
 	fi
 	msg "\n방송시간: $starttime / 현재: $CTIME\n$title E$ep $subject\n${FILENAME}.ts\n$url\n"
 	#-ERROR-CHECK------------------------------------------------------
-	msg -t "Waiting for youtube-dl to check URL..."
-	$youtube_c -s "$url" & YPID=$!
-	wait $YPID; ExitCode=$?
+	msg -t "Checking URL..."
+	curl -fsS "$url" > /dev/null & CURLPID=$!
+	wait $CURLPID; ExitCode=$?
 
 	if [ $ExitCode = 0 ]
 	then
 		info_msg -t "Valid URL, Proceeding..."
 		$youtube_c --hls-use-mpegts --no-part "$url" --output "${OPATH}/show/$title/${FILENAME}.ts" & YPID=$!
 	else
-		err_msg -t "INVALID URL, retrying...\n"
-		content_backup
+		err_msg -t "Invalid URL, retrying...\n"
 		contentget
 		exrefresh
 		timeupdate
@@ -549,7 +549,7 @@ function getstream()
 				fi
 				if [ "$(ps -p $YPID | awk 'FNR == 2 {print $4}')" = 'youtube-dl' ]
 				then
-					alert_msg -t "Download stalled, but youtube-dl is still alive!\n"
+					alert_msg -t "Download stalled, but show is still ONAIR!\n"
 				elif [ "$(ps -p $YPID | awk 'FNR == 2 {print $4}')" != 'youtube-dl' ]
 				then
 					if [ "$MAXRETRY" = "0" ]

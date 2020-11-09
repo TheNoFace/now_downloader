@@ -1,12 +1,14 @@
 # Now Downloader
 
 Bash script to download streaming from [NAVER NOW](https://now.naver.com)   
-Version: 1.3.4
+Version: 1.3.5-beta
 
 ### Required packages
 
 If you want to run this script using crontab, then make sure you can run below commands in crontab. (not local)
 
+- wget
+- curl
 - bc
 - [jq](https://stedolan.github.io/jq/)
 - [youtube-dl](https://youtube-dl.org/)
