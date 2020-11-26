@@ -38,7 +38,7 @@ else
 	NC=""
 fi
 
-NDV="1.3.5-beta"
+NDV="1.3.5"
 BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
 
@@ -419,7 +419,7 @@ function get_info()
 	fi
 
 	curl -s https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content | \
-    jq -r '.contentList[] | .home.title.text + " (ID: " + .contentId + " / 호스트: " + (.description.clova.host|join(", ")) + ")" +  "\n게스트: " + (.description.clova.guest|join(",")) + "\n\n" + .title.text + "\n\n" + .description.text + "\n"'
+	jq -r '.contentList[] | .home.title.text + " (ID: " + .contentId + " / 호스트: " + (.description.clova.host|join(", ")) + ")" +  "\n게스트: " + (.description.clova.guest|join(",")) + "\n\n" + .title.text + "\n\n" + .description.text + "\n"'
 	exit 0
 }
 
