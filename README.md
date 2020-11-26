@@ -12,7 +12,7 @@ If you want to run this script using crontab, then make sure you can run below c
 - bc
 - [jq](https://stedolan.github.io/jq/)
 - [youtube-dl](https://youtube-dl.org/)
-- ffmpeg
+- [ffmpeg](https://ffmpeg.org/)
 
 ### How to use
 ```
@@ -25,6 +25,7 @@ Options:
   -v  | --version             Show program name and version
   -h  | --help                Show this help screen
   -ls | --list                List every show's ID and it's title
+        --info                Display detailed info of Show
   -u  | --user                Display current/total users of the show
   -vb | --verbose             Display wget download information
   -f  | --force               Start download immediately without any time checks
@@ -35,7 +36,7 @@ Options:
                               Default is set to 10 times
   -dr | --dretry              Disable retries (same as -r 0)
   -t  | --chkint [seconds]    Check stream status if it has ended abnormally by checking file size
-                              Default is set to 30 seconds
+                              Default is set to 20 seconds
   -c  | --custimer [seconds]  Custom sleep timer before starting script
                               WARNING: Mandatory if today is not the broadcasting day
 Notes:

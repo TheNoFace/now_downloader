@@ -43,7 +43,6 @@ BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
 
 P_LIST=(bc jq curl wget youtube-dl ffmpeg)
-P_LIST_E=0
 
 SHOW_ID=""
 FORCE=""
@@ -157,6 +156,8 @@ function get_parms()
 				VERB=1 ; shift ;;
 			-u|--user)
 				G_USR=1 ; shift ;;
+			--info)
+				GetInfo=1 ; shift ;;
 			*)
 				check_invalid_parms "$1" ; break ;;
 		esac
@@ -196,6 +197,7 @@ Options:
   -v  | --version             Show program name and version
   -h  | --help                Show this help screen
   -ls | --list                List every show's ID and it's title
+        --info                Display detailed info of Show
   -u  | --user                Display current/total users of the show
   -vb | --verbose             Display wget download information
   -f  | --force               Start download immediately without any time checks
@@ -249,21 +251,18 @@ function dir_check()
 	echo
 }
 
-function script_init()
+function package_check()
 {
-	d_date=$(date +'%y%m%d')
-
 	for l in ${P_LIST[@]}
 	do
 		P=$(command -v $l)
 		if [ -z $P ]
 		then
 			NFOUND=(${NFOUND[@]} $l)
-			P_LIST_E=1
 		fi
 	done
 
-	if [ $P_LIST_E = 1 ]
+	if [ ${#NFOUND[@]} != 0 ]
 	then
 		print_banner
 		array=${NFOUND[@]}
@@ -273,12 +272,19 @@ function script_init()
 	else
 		if [ -t 1 ]
 		then
-			info_msg "\nPackage check OK!\n"
+			print_banner
 		else
-			msg "\n---$BANNER-----------ShowID: ${SHOW_ID}-----------$(date +'%F %a %T')---"
-			info_msg "\nPackage check OK!\n"
+			msg "\n---$BANNER-----------ShowID: ${SHOW_ID}-----------$(date +'%F %a %T')---\n"
 		fi
 	fi
+}
+
+function script_init()
+{
+	d_date=$(date +'%y%m%d')
+	package_check
+
+	[ "$GetInfo" = 1 ] && get_info
 
 	if [ -n "$VERB" ]
 	then
@@ -399,6 +405,22 @@ function script_init()
 		fi
 		exit 0
 	fi
+}
+
+function get_info()
+{
+	curl -s https://now.naver.com/api/nnow/v1/stream/$SHOW_ID/content | jq -e '.contentList[].home.title.text' > /dev/null & JQPID=$!
+	wait $JQPID; ExitCode=$?
+
+	if [ $ExitCode != 0 ]
+	then
+		err_msg "Invalid Show ID, Use --list option to list available shows!\n"
+		exit 6
+	fi
+
+	curl -s https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content | \
+    jq -r '.contentList[] | .home.title.text + " (ID: " + .contentId + " / 호스트: " + (.description.clova.host|join(", ")) + ")" +  "\n게스트: " + (.description.clova.guest|join(",")) + "\n\n" + .title.text + "\n\n" + .description.text + "\n"'
+	exit 0
 }
 
 # content: general information of show
@@ -721,7 +743,7 @@ function timeupdate()
 	else
 		FILENAME="${d_date}.NAVER NOW.$title.E$ep.${subject}_$CTIME"
 	fi
-	FILENAME=${FILENAME//'/'/' '}
+	FILENAME=${FILENAME//'w/'/'with'}
 	FILENAME=${FILENAME//'%'/'%%'}
 	alert_msg "Time variables refreshed"
 }
@@ -862,8 +884,6 @@ function main()
 	else
 		onairwait
 		info_msg "쇼가 시작됨\n"
-		# info_msg "쇼가 시작됨, 3초 후 다운로드 시작\n"
-		# sleep 3 # To avoid unvalid URL
 		contentget
 		exrefresh
 		timeupdate
@@ -873,7 +893,8 @@ function main()
 
 function get_list()
 {
-	info_msg "\n$BANNER\n"
+	package_check
+
 	idlist=($(curl -s https://now.naver.com/api/nnow/v1/stream/livelist | jq -r '.liveList[] | (.contentId|tostring)'))
 	timelist=$(curl -s https://now.naver.com/api/nnow/v1/stream/livelist | jq '.liveList[] | .tobe')
 	IFS=$'\n' timelist=(${timelist})
@@ -911,6 +932,8 @@ function get_list()
 		((n++))
 	done
 	echo
+
+	exit 0
 }
 
 ### SCRIPT START
