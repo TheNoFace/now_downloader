@@ -51,7 +51,7 @@ OPATH_I=""
 ITG_CHECK=""
 N_RETRY=""
 MAXRETRYSET=10
-CHKINTSET=20
+CHKINTSET=30
 CUSTIMER=""
 SREASON=""
 VERB=""
@@ -511,11 +511,7 @@ function getstream()
 		echo -e "Host: $showhost\nEP: $ep\n\n$subject\n\n$INFO" > "${OPATH}/show/$title/${d_date}_${showhost}_Info.txt"
 	fi
 
-	if [ "$vcheck" = 'true' ]
-	then
-		alert_msg "\n보이는 쇼 입니다"
-	fi
-	msg "\n방송시간: $starttime / 현재: $CTIME\n$title E$ep $subject\n${FILENAME}.ts\n$url\n"
+	msg "\n방송시간: $starttime / 현재: $CTIME\n$title By $showhost E$ep $subject\n${OPATH}/show/$title/${FILENAME}.ts\n$url\n"
 	#-ERROR-CHECK------------------------------------------------------
 	msg -t "Checking URL..."
 	curl -fsS "$url" > /dev/null & CURLPID=$!
@@ -530,7 +526,6 @@ function getstream()
 		contentget
 		exrefresh
 		timeupdate
-		((RETRY++))
 		getstream "URL_RETRY"
 	fi
 	#-ERROR-CHECK------------------------------------------------------
@@ -676,7 +671,7 @@ function renamer()
 function exrefresh()
 {
 	unset url title startdate starttime
-	showhost=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.content" | grep -oP '호스트: \K[^\\r]+')
+	showhost=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.content" | grep -oP '호스트: \K[^\\r]+' | head -n 1)
 	title=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.content" | grep -oP 'home":{"title":{"text":"\K[^"]+')
 	vcheck=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.content" | grep -oP 'video":\K[^,]+')
 	if [ "$vcheck" = 'true' ]
@@ -800,6 +795,7 @@ function onairwait()
 				tput cuu1; tput el
 			done
 		fi
+		[ $FIRST = 1 ] && echo # for better logging
 		timeupdate
 		msg -t "Time difference: $TIMECHECK min"
 		if [ "$STATUS" = "ONAIR" ]
@@ -817,15 +813,15 @@ function onairwait()
 			W_TIMER=3600
 		elif [ "$TIMECHECK" -lt 65 ] # 시작 시간이 65분 미만 차이
 		then
-			if [ "$TIMECHECK" -gt 12 ] # 시작 시간이 12분 초과 차이
+			if [ "$TIMECHECK" -gt 13 ] # 시작 시간이 12분 초과 차이
 			then
 				W_TIMER=600
-			elif [ "$TIMECHECK" -le 12 ] # 시작 시간이 12분 이하 차이
+			elif [ "$TIMECHECK" -le 13 ] # 시작 시간이 12분 이하 차이
 			then
-				if [ "$TIMECHECK" -gt 2 ] # 시작 시간이 3분 초과 차이
+				if [ "$TIMECHECK" -gt 3 ] # 시작 시간이 3분 초과 차이
 				then
 					W_TIMER=60
-				elif [ "$TIMECHECK" -le 2 ] # 시작 시간이 3분 이하 차이
+				elif [ "$TIMECHECK" -le 3 ] # 시작 시간이 3분 이하 차이
 				then
 					W_TIMER=1
 				fi
@@ -858,9 +854,7 @@ function main()
 		alert_msg "\n비디오 스트림 없음, 오디오만 다운로드 합니다\n"
 	fi
 
-	echo "방송일  : $startdate / 오늘: ${d_date}"
-	msg "방송시간: $starttime / 현재: $CTIME"
-	echo -e "$title E$ep $subject\n"
+	msg "방송일  : $startdate / 오늘: ${d_date}\n방송시간: $starttime / 현재: $CTIME\n$title By $showhost\nE$ep $subject"
 
 	if [ -n "$CUSTIMER" ]
 	then
@@ -879,11 +873,9 @@ function main()
 	if [ "$STATUS" = "ONAIR" ]
 	then
 		msg "Live Status: ${RED}$STATUS${NC}\n"
-		info_msg "쇼가 시작됨"
 		getstream 1
 	else
 		onairwait
-		info_msg "쇼가 시작됨\n"
 		contentget
 		exrefresh
 		timeupdate
