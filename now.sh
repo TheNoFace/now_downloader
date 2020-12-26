@@ -15,7 +15,6 @@
 # 201018) onairwait(): TIMECHECK의 60% 이상 분단위 sleep
 # 201018) Verbose 모드에서만 표시할 메세지 정리
 # 201018) Log 내재화
-# 201028) get_info 추가
 # 201109) getstream()에서 URL 확인 시 MAXRETRY 제한
 #
 #------------------------------------------------------------------
@@ -38,7 +37,7 @@ else
 	NC=""
 fi
 
-NDV="1.3.5"
+NDV="1.3.6-beta"
 BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
 
@@ -409,7 +408,8 @@ function script_init()
 
 function get_info()
 {
-	curl -s https://now.naver.com/api/nnow/v1/stream/$SHOW_ID/content | jq -e '.contentList[].home.title.text' > /dev/null & JQPID=$!
+	content=$(curl -s https://now.naver.com/api/nnow/v1/stream/$SHOW_ID/content)
+	echo "$content" | jq -e '.contentList[].home.title.text' > /dev/null & JQPID=$!
 	wait $JQPID; ExitCode=$?
 
 	if [ $ExitCode != 0 ]
@@ -418,8 +418,16 @@ function get_info()
 		exit 6
 	fi
 
-	curl -s https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content | \
-	jq -r '.contentList[] | .home.title.text + " (ID: " + .contentId + " / 호스트: " + (.description.clova.host|join(", ")) + ")" +  "\n게스트: " + (.description.clova.guest|join(",")) + "\n\n" + .title.text + "\n\n" + .description.text + "\n"'
+	showhost=$(echo "$content" | grep -oP '호스트: \K[^\\r]+' | head -n 1)
+	guest=$(echo "$content" | jq -r '.contentList[] | (.description.clova.guest|join(","))')
+	if [ -z "$guest" ]
+	then
+		info=$(echo "$content" | jq -r '.contentList[] | .home.title.text + " by HOST" + " (ID: " + .contentId + " / 보쇼: " + (.video|tostring)+ ")" + "\n\n" + .title.text + "\n\n" + .description.text | sub("false"; "X") | sub("true"; "O")')
+	else
+		info=$(echo "$content" | jq -r '.contentList[] | .home.title.text + " by HOST" + " (ID: " + .contentId + " / 보쇼: " + (.video|tostring)+ ")" + "\n게스트: " + (.description.clova.guest|join(",")) + "\n\n" + .title.text + "\n\n" + .description.text | sub("false"; "X") | sub("true"; "O")')
+	fi
+
+	echo -e "${info/HOST/$showhost}\n"
 	exit 0
 }
 
@@ -813,10 +821,10 @@ function onairwait()
 			W_TIMER=3600
 		elif [ "$TIMECHECK" -lt 65 ] # 시작 시간이 65분 미만 차이
 		then
-			if [ "$TIMECHECK" -gt 13 ] # 시작 시간이 12분 초과 차이
+			if [ "$TIMECHECK" -gt 13 ] # 시작 시간이 13분 초과 차이
 			then
 				W_TIMER=600
-			elif [ "$TIMECHECK" -le 13 ] # 시작 시간이 12분 이하 차이
+			elif [ "$TIMECHECK" -le 13 ] # 시작 시간이 13분 이하 차이
 			then
 				if [ "$TIMECHECK" -gt 3 ] # 시작 시간이 3분 초과 차이
 				then
@@ -888,8 +896,7 @@ function get_list()
 	package_check
 
 	idlist=($(curl -s https://now.naver.com/api/nnow/v1/stream/livelist | jq -r '.liveList[] | (.contentId|tostring)'))
-	timelist=$(curl -s https://now.naver.com/api/nnow/v1/stream/livelist | jq '.liveList[] | .tobe')
-	IFS=$'\n' timelist=(${timelist})
+	IFS=$'\n' timelist=($(curl -s https://now.naver.com/api/nnow/v1/stream/livelist | jq '.liveList[] | .tobe')) # https://unix.stackexchange.com/a/184866
 
 	i=0; n=1
 	for id in "${idlist[@]}"
