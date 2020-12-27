@@ -486,7 +486,13 @@ function show_chat()
 		else
 			if [ -z $notFirst ] && [ $STATUS != "ONAIR" ] && [ "${#sortedList[@]}" != 0 ]
 			then
-				msg "Last ${#sortedList[@]} manager chat(s) saved by NOW:\n"
+				if [ "$showManager" = 1 ]
+				then
+					msg "Last ${#sortedList[@]} manager chat(s) saved by NOW:\n"
+				elif [ "$showManager" = 0 ]
+				then
+					msg "Last ${#sortedList[@]} chat(s) saved by NOW:\n"
+				fi
 				printf "%s\n" "${sortedList[@]}"
 				break
 			fi
@@ -520,13 +526,20 @@ function show_chat()
 	else
 		echo
 		info_msg -t "Status: $STATUS (cumulatedList: ${#cumulatedList[@]} / sortedList: ${#sortedList[@]})\n"
+		if [ "$showManager" = 1 ]
+		then
+			chatOutPath="${OPATH}/chat/${SHOW_ID}_${d_date}_chat.txt"
+		elif [ "$showManager" = 0 ]
+		then
+			chatOutPath="${OPATH}/chat/${SHOW_ID}_${d_date}_chat_all.txt"
+		fi
 		n=0
 		for (( i = 0; i < ${#sortedList[@]}; i++ ))
 		do
-			echo -e "${sortedList[$n]}" >> "${OPATH}/chat/${SHOW_ID}_${d_date}_chat.txt"
+			echo "${sortedList[$n]}" >> $chatOutPath
 			((n++))
 		done
-		echo -e "\n[$(date +'%x %T')] Status: $STATUS (cumulatedList: ${#cumulatedList[@]} / sortedList: ${#sortedList[@]})\n" >> "${OPATH}/chat/${SHOW_ID}_${d_date}_chat.txt"
+		echo -e "\n[$(date +'%x %T')] Status: $STATUS (cumulatedList: ${#cumulatedList[@]} / sortedList: ${#sortedList[@]})\n" >> $chatOutPath
 		exit 0
 	fi
 }
