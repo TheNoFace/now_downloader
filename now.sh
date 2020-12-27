@@ -37,7 +37,7 @@ else
 	NC=""
 fi
 
-NDV="1.4.0-beta"
+NDV="1.4.0"
 BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
 oriIFS=$IFS
