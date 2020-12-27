@@ -37,11 +37,13 @@ else
 	NC=""
 fi
 
-NDV="1.3.6-beta"
+NDV="1.4.0-beta"
 BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
+oriIFS=$IFS
 
 P_LIST=(bc jq curl wget youtube-dl ffmpeg)
+dirList=(content log show chat)
 
 SHOW_ID=""
 FORCE=""
@@ -51,6 +53,7 @@ ITG_CHECK=""
 N_RETRY=""
 MAXRETRYSET=10
 CHKINTSET=30
+chatCheckInterval=5
 CUSTIMER=""
 SREASON=""
 VERB=""
@@ -157,6 +160,10 @@ function get_parms()
 				G_USR=1 ; shift ;;
 			--info)
 				GetInfo=1 ; shift ;;
+			--chat)
+				showChat=1 ; showManager=1 ; shift ;;
+			--chatall)
+				showChat=1 ; showManager=0 ; shift ;;
 			*)
 				check_invalid_parms "$1" ; break ;;
 		esac
@@ -285,6 +292,52 @@ function script_init()
 
 	[ "$GetInfo" = 1 ] && get_info
 
+	if [ -z ${OPATH_I} ]
+	then
+		if [ ! -e .opath ]
+		then
+			echo -e "Seems like it's your first time to run this scipt"
+			echo -n "Please enter directory to save (e.g: /home/$USER/now): "
+			read OPATH
+			OPATH=${OPATH/"~"/"/home/$USER"}
+			dir_check
+		elif [ -e .opath ]
+		then
+			OPATH=$(cat .opath)
+			echo -e "Output Path: ${YLW}${OPATH}${NC}"
+			echo -e "If you want to change output path, delete ${YLW}$PWD/.opath${NC} file or use -o option"
+			dir_check
+		else
+			err_msg "ERROR: script_init OPATH\n"
+			exit 5
+		fi
+	elif [ -n ${OPATH_I} ]
+	then
+		OPATH=${OPATH_I/"~"/"/home/$USER"}
+		echo -e "Output Path: ${YLW}${OPATH} (Overrided)${NC}"
+		dir_check
+	fi
+
+	for i in ${dirList[@]}
+	do
+		if [ ! -d "${OPATH}/$i" ]
+		then
+			alert_msg "$i folder does not exitst, creating..."
+			mkdir "${OPATH}/$i"
+		else
+			msg "$i folder exists"
+		fi
+	done
+	echo
+
+	if [ "$showChat" = 1 ]
+	then
+		livestatusURL="https://now.naver.com/api/nnow/v1/stream/$SHOW_ID/livestatus"
+		chatId=$(curl -s $livestatusURL | jq -r '.status.clientConfig.poll.comment.objectId')
+		chatURL="https://apis.naver.com/now_web/now-chat-api/list?object_id=$chatId"
+		show_chat
+	fi
+
 	if [ -n "$VERB" ]
 	then
 		alert_msg "Verbose Mode"
@@ -316,44 +369,6 @@ function script_init()
 	then
 		alert_msg "Do not check integrity of content/livestatus files in content folder"
 	fi
-
-	if [ -z ${OPATH_I} ]
-	then
-		if [ ! -e .opath ]
-		then
-			echo -e "\nSeems like it's your first time to run this scipt"
-			echo -n "Please enter directory to save (e.g: /home/$USER/now): "
-			read OPATH
-			OPATH=${OPATH/"~"/"/home/$USER"}
-			dir_check
-		elif [ -e .opath ]
-		then
-			OPATH=$(cat .opath)
-			echo -e "\nOutput Path: ${YLW}${OPATH}${NC}"
-			echo -e "If you want to change output path, delete ${YLW}$PWD/.opath${NC} file or use -o option"
-			dir_check
-		else
-			err_msg "\nERROR: script_init OPATH\n"
-			exit 5
-		fi
-	elif [ -n ${OPATH_I} ]
-	then
-		OPATH=${OPATH_I/"~"/"/home/$USER"}
-		echo -e "\nOutput Path: ${YLW}${OPATH} (Overrided)${NC}"
-		dir_check
-	fi
-
-	for i in content log show
-	do
-		if [ ! -d "${OPATH}/$i" ]
-		then
-			alert_msg "$i folder does not exitst, creating..."
-			mkdir "${OPATH}/$i"
-		else
-			msg "$i folder exists"
-		fi
-	done
-	echo
 
 	if [ -z $N_RETRY ]
 	then
@@ -429,6 +444,70 @@ function get_info()
 
 	echo -e "${info/HOST/$showhost}\n"
 	exit 0
+}
+
+function get_chat()
+{
+    IFS=$'\n'
+    # chatList=($(curl -s $chatURL | jq -r '[.result.recentManagerCommentList[] | .userName + ": " + .contents] | reverse[]'))
+    # timelist=($(curl -s $chatURL | jq -r '[.result.recentManagerCommentList[] | .regTime] | reverse[]'))
+    # chatList=($(curl -s $chatURL | jq -r '.result.recentManagerCommentList[] | "[" + .regTime + "] " + .userName + ": " + .contents'))
+	if [ "$showManager" = 1 ]
+	then
+		chatList=($(curl -s $chatURL | jq -r '.result.commentList[] | select(.manager == true) | "[" + .regTime + "] " + .userName + ": " + .contents'))
+	elif [ "$showManager" = 0 ]
+	then
+		chatList=($(curl -s $chatURL | jq -r '.result.commentList[] | select(.manager == false) | "[" + .regTime + "] " + .userName + ": " + .contents'))
+	fi
+
+	preCount=${#sortedList[@]}
+    cumulatedList=(${cumulatedList[@]} ${chatList[@]})
+    sortedList=($(printf "%s\n" "${cumulatedList[@]}" | sort -u))
+	postCount=${#sortedList[@]}
+}
+
+function show_chat()
+{
+    while :
+    do
+        get_chat
+
+		if [ "$notFirst" = 1 ]
+		then
+			for (( i = $preCount; i < $postCount; i++ ))
+			do
+				echo "${sortedList[$i]}"
+			done
+		else
+			printf "%s\n" "${sortedList[@]}"
+		fi
+        get_status
+
+        if [ $STATUS != "ONAIR" ]
+        then
+            break
+        fi
+
+        sleep $chatCheckInterval
+		notFirst=1
+    done
+
+    if [ ${#sortedList[@]} = 0 ]
+    then
+        echo -e "[$(date +'%x %T')] Status: $STATUS / No chats found!\n"
+        exit 0
+    else
+		echo -e "\n[$(date +'%x %T')] Status: $STATUS (cumulatedList: ${#cumulatedList[@]} / sortedList: ${#sortedList[@]})\n"
+		n=0
+		for (( i = 0; i < ${#sortedList[@]}; i++ ))
+		do
+			echo -e "${sortedList[$n]}" >> "${OPATH}/chat/${SHOW_ID}_${d_date}_chat.txt"
+			((n++))
+		done
+		get_status
+		echo -e "\n[$(date +'%x %T')] Status: $STATUS (cumulatedList: ${#cumulatedList[@]} / sortedList: ${#sortedList[@]})\n" >> "${OPATH}/chat/${SHOW_ID}_${d_date}_chat.txt"
+        exit 0
+    fi
 }
 
 # content: general information of show
