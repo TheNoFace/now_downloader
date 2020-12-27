@@ -448,29 +448,34 @@ function get_info()
 
 function get_chat()
 {
-    IFS=$'\n'
-    # chatList=($(curl -s $chatURL | jq -r '[.result.recentManagerCommentList[] | .userName + ": " + .contents] | reverse[]'))
-    # timelist=($(curl -s $chatURL | jq -r '[.result.recentManagerCommentList[] | .regTime] | reverse[]'))
-    # chatList=($(curl -s $chatURL | jq -r '.result.recentManagerCommentList[] | "[" + .regTime + "] " + .userName + ": " + .contents'))
+	get_status
+	IFS=$'\n'
+	# chatList=($(curl -s $chatURL | jq -r '[.result.recentManagerCommentList[] | .userName + ": " + .contents] | reverse[]'))
+	# timelist=($(curl -s $chatURL | jq -r '[.result.recentManagerCommentList[] | .regTime] | reverse[]'))
 	if [ "$showManager" = 1 ]
 	then
-		chatList=($(curl -s $chatURL | jq -r '.result.commentList[] | select(.manager == true) | "[" + .regTime + "] " + .userName + ": " + .contents'))
+		if [ -z $notFirst ] && [ $STATUS != "ONAIR" ]
+		then
+			chatList=($(curl -s $chatURL | jq -r '.result.recentManagerCommentList[] | "[" + .regTime + "] " + .userName + ": " + .contents'))
+		else
+			chatList=($(curl -s $chatURL | jq -r '.result.commentList[] | select(.manager == true) | "[" + .regTime + "] " + .userName + ": " + .contents'))
+		fi
 	elif [ "$showManager" = 0 ]
 	then
 		chatList=($(curl -s $chatURL | jq -r '.result.commentList[] | select(.manager == false) | "[" + .regTime + "] " + .userName + ": " + .contents'))
 	fi
 
 	preCount=${#sortedList[@]}
-    cumulatedList=(${cumulatedList[@]} ${chatList[@]})
-    sortedList=($(printf "%s\n" "${cumulatedList[@]}" | sort -u))
+	cumulatedList=(${cumulatedList[@]} ${chatList[@]})
+	sortedList=($(printf "%s\n" "${cumulatedList[@]}" | sort -u))
 	postCount=${#sortedList[@]}
 }
 
 function show_chat()
 {
-    while :
-    do
-        get_chat
+	while :
+	do
+		get_chat
 
 		if [ "$notFirst" = 1 ]
 		then
@@ -479,35 +484,51 @@ function show_chat()
 				echo "${sortedList[$i]}"
 			done
 		else
-			printf "%s\n" "${sortedList[@]}"
+			if [ -z $notFirst ] && [ $STATUS != "ONAIR" ] && [ "${#sortedList[@]}" != 0 ]
+			then
+				msg "Last ${#sortedList[@]} manager chat(s) saved by NOW:\n"
+				printf "%s\n" "${sortedList[@]}"
+				break
+			fi
+			if [ "$showManager" = 1 ]
+			then
+				msg "Getting manager chat messages every $chatCheckInterval seconds\n"
+			elif [ "$showManager" = 0 ]
+			then
+				msg "Getting every chat messages every $chatCheckInterval seconds\n"
+			fi
+			if [ "${#sortedList[@]}" != 0 ]
+			then
+				printf "%s\n" "${sortedList[@]}"
+			fi
 		fi
-        get_status
+		get_status
 
-        if [ $STATUS != "ONAIR" ]
-        then
-            break
-        fi
+		if [ $STATUS != "ONAIR" ]
+		then
+			break
+		fi
 
-        sleep $chatCheckInterval
+		sleep $chatCheckInterval
 		notFirst=1
-    done
+	done
 
-    if [ ${#sortedList[@]} = 0 ]
-    then
-        echo -e "[$(date +'%x %T')] Status: $STATUS / No chats found!\n"
-        exit 0
-    else
-		echo -e "\n[$(date +'%x %T')] Status: $STATUS (cumulatedList: ${#cumulatedList[@]} / sortedList: ${#sortedList[@]})\n"
+	if [ ${#sortedList[@]} = 0 ]
+	then
+		alert_msg -t "Status: $STATUS / No chats found!\n"
+		exit 0
+	else
+		echo
+		info_msg -t "Status: $STATUS (cumulatedList: ${#cumulatedList[@]} / sortedList: ${#sortedList[@]})\n"
 		n=0
 		for (( i = 0; i < ${#sortedList[@]}; i++ ))
 		do
 			echo -e "${sortedList[$n]}" >> "${OPATH}/chat/${SHOW_ID}_${d_date}_chat.txt"
 			((n++))
 		done
-		get_status
 		echo -e "\n[$(date +'%x %T')] Status: $STATUS (cumulatedList: ${#cumulatedList[@]} / sortedList: ${#sortedList[@]})\n" >> "${OPATH}/chat/${SHOW_ID}_${d_date}_chat.txt"
-        exit 0
-    fi
+		exit 0
+	fi
 }
 
 # content: general information of show
