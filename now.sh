@@ -154,7 +154,7 @@ function get_parms()
 				CHKINT="$2" ; shift ; shift ;;
 			-c|--custimer)
 				CUSTIMER="$2" ; shift ; shift ;;
-			-vb|--verbose)
+			--verbose)
 				VERB=1 ; shift ;;
 			-u|--user)
 				G_USR=1 ; shift ;;
@@ -200,24 +200,25 @@ function print_help()
 	echo "  -i  | --id [number]         ID of the show to download
 
 Options:
-  -v  | --version             Show program name and version
-  -h  | --help                Show this help screen
-  -ls | --list                List every show's ID and it's title
-        --info                Display detailed info of Show
-  -u  | --user                Display current/total users of the show
-  -vb | --verbose             Display wget download information
-  -f  | --force               Start download immediately without any time checks
-  -k  | --keep                Do not delete original audio stream(.ts) file after download finishes
-  -o  | --opath <dir>         Overrides output path to check if it's been set before
+  -c  | --custimer [seconds]  Custom sleep timer before starting script"
+  	alert_msg "                              WARNING: Mandatory if today is not the broadcasting day"
+  	echo "        --chat                Print live or recent manager's chats and save into file
+        --chatall             Print live or recent chats and save into file
   -dc | --dcont               Do not check integrity of content/livestatus files in content folder
+  -dr | --dretry              Disable retries (same as -r 0)
+  -f  | --force               Start download immediately without any time checks
+  -h  | --help                Show this help screen
+        --info                Display detailed info of show and exits
+  -k  | --keep                Do not delete original audio stream(.ts) file after download finishes
+  -ls | --list                List every show's ID and it's title and exits
+  -o  | --opath <dir>         Overrides output path to check if it's been set before
   -r  | --maxretry [number]   Maximum retries if download fails
                               Default is set to $MAXRETRYSET times
-  -dr | --dretry              Disable retries (same as -r 0)
   -t  | --chkint [seconds]    Check stream status if it has ended abnormally by checking file size
+  -u  | --user                Display current/total users of the show
                               Default is set to $CHKINTSET seconds
-  -c  | --custimer [seconds]  Custom sleep timer before starting script"
-	alert_msg "                              WARNING: Mandatory if today is not the broadcasting day"
-
+  -v  | --version             Show program name and version
+        --verbose             Print wget/youtube-dl/ffmpeg messages"
 	echo "Notes:
   - Short options should not be grouped. You must pass each parameter on its own.
   - Disabling flags priors than setting flags
