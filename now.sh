@@ -37,7 +37,7 @@ else
 	NC=""
 fi
 
-NDV="1.4.0"
+NDV="1.4.1"
 BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
 oriIFS=$IFS
@@ -161,9 +161,9 @@ function get_parms()
 			--info)
 				GetInfo=1 ; shift ;;
 			--chat)
-				showChat=1 ; showManager=1 ; shift ;;
+				showChat=1 ; managerOnly=1 ; shift ;;
 			--chatall)
-				showChat=1 ; showManager=0 ; shift ;;
+				showChat=1 ; managerOnly=0 ; shift ;;
 			*)
 				check_invalid_parms "$1" ; break ;;
 		esac
@@ -453,7 +453,7 @@ function get_chat()
 	IFS=$'\n'
 	# chatList=($(curl -s $chatURL | jq -r '[.result.recentManagerCommentList[] | .userName + ": " + .contents] | reverse[]'))
 	# timelist=($(curl -s $chatURL | jq -r '[.result.recentManagerCommentList[] | .regTime] | reverse[]'))
-	if [ "$showManager" = 1 ]
+	if [ "$managerOnly" = 1 ]
 	then
 		if [ -z $notFirst ] && [ $STATUS != "ONAIR" ]
 		then
@@ -461,9 +461,9 @@ function get_chat()
 		else
 			chatList=($(curl -s $chatURL | jq -r '.result.commentList[] | select(.manager == true) | "[" + .regTime + "] " + .userName + ": " + .contents'))
 		fi
-	elif [ "$showManager" = 0 ]
+	elif [ "$managerOnly" = 0 ]
 	then
-		chatList=($(curl -s $chatURL | jq -r '.result.commentList[] | select(.manager == false) | "[" + .regTime + "] " + .userName + ": " + .contents'))
+		chatList=($(curl -s $chatURL | jq -r '.result.commentList[] | "[" + .regTime + "] " + .userName + ": " + .contents'))
 	fi
 
 	preCount=${#sortedList[@]}
@@ -487,20 +487,20 @@ function show_chat()
 		else
 			if [ -z $notFirst ] && [ $STATUS != "ONAIR" ] && [ "${#sortedList[@]}" != 0 ]
 			then
-				if [ "$showManager" = 1 ]
+				if [ "$managerOnly" = 1 ]
 				then
 					msg "Last ${#sortedList[@]} manager chat(s) saved by NOW:\n"
-				elif [ "$showManager" = 0 ]
+				elif [ "$managerOnly" = 0 ]
 				then
 					msg "Last ${#sortedList[@]} chat(s) saved by NOW:\n"
 				fi
 				printf "%s\n" "${sortedList[@]}"
 				break
 			fi
-			if [ "$showManager" = 1 ]
+			if [ "$managerOnly" = 1 ]
 			then
 				msg "Getting manager chat messages every $chatCheckInterval seconds\n"
-			elif [ "$showManager" = 0 ]
+			elif [ "$managerOnly" = 0 ]
 			then
 				msg "Getting every chat messages every $chatCheckInterval seconds\n"
 			fi
@@ -527,10 +527,10 @@ function show_chat()
 	else
 		echo
 		info_msg -t "Status: $STATUS (cumulatedList: ${#cumulatedList[@]} / sortedList: ${#sortedList[@]})\n"
-		if [ "$showManager" = 1 ]
+		if [ "$managerOnly" = 1 ]
 		then
 			chatOutPath="${OPATH}/chat/${SHOW_ID}_${d_date}_chat.txt"
-		elif [ "$showManager" = 0 ]
+		elif [ "$managerOnly" = 0 ]
 		then
 			chatOutPath="${OPATH}/chat/${SHOW_ID}_${d_date}_chat_all.txt"
 		fi
