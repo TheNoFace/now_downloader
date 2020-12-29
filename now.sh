@@ -37,7 +37,7 @@ else
 	NC=""
 fi
 
-NDV="1.4.1"
+NDV="1.4.2"
 BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
 oriIFS=$IFS
@@ -53,7 +53,7 @@ ITG_CHECK=""
 N_RETRY=""
 MAXRETRYSET=10
 CHKINTSET=30
-chatCheckInterval=5
+chatCheckInterval=1
 CUSTIMER=""
 SREASON=""
 VERB=""
@@ -457,17 +457,17 @@ function get_chat()
 	then
 		if [ -z $notFirst ] && [ $STATUS != "ONAIR" ]
 		then
-			chatList=($(curl -s $chatURL | jq -r '.result.recentManagerCommentList[] | "[" + .regTime + "] " + .userName + ": " + .contents'))
+			chatList=("$(curl -s $chatURL | jq -r '.result.recentManagerCommentList[] | "[" + .regTime + "] " + .userName + ": " + .contents')")
 		else
-			chatList=($(curl -s $chatURL | jq -r '.result.commentList[] | select(.manager == true) | "[" + .regTime + "] " + .userName + ": " + .contents'))
+			chatList=("$(curl -s $chatURL | jq -r '.result.commentList[] | select(.manager == true) | "[" + .regTime + "] " + .userName + ": " + .contents')")
 		fi
 	elif [ "$managerOnly" = 0 ]
 	then
-		chatList=($(curl -s $chatURL | jq -r '.result.commentList[] | "[" + .regTime + "] " + .userName + ": " + .contents'))
+		chatList=("$(curl -s $chatURL | jq -r '.result.commentList[] | "[" + .regTime + "] " + .userName + ": " + .contents')")
 	fi
 
 	preCount=${#sortedList[@]}
-	cumulatedList=(${cumulatedList[@]} ${chatList[@]})
+	cumulatedList=(${cumulatedList[@]} "${chatList[@]}")
 	sortedList=($(printf "%s\n" "${cumulatedList[@]}" | sort -u))
 	postCount=${#sortedList[@]}
 }
@@ -853,7 +853,7 @@ function timeupdate()
 {
 	d_date=$(date +'%y%m%d')
 	CTIME=$(date +'%H%M%S')
-	TIMECHECK=$(echo "($(date -d @$ORI_DATE +%H)*60+$(date -d @$ORI_DATE +%M))-($(date +%H)*60+$(date +%M))" | bc -l)
+	TIMECHECK=$(echo "($(date -d @$ORI_DATE +%H)*60+$(date -d @$ORI_DATE +%M))-($(date +%H)*60+$(date +%M))" | bc)
 	if [ "$vcheck" = 'true' ]
 	then
 		FILENAME="${d_date}.NAVER NOW.$title.E$ep.${subject}_VID_$CTIME"
@@ -1021,16 +1021,16 @@ function get_list()
 		then
 			if [ ${#id} = 2 ]
 			then
-				output=(${output[@]} "$id : $info (Unknown)")
+				output=(${output[@]} " $id | $info (Unknown)")
 			else
-				output=(${output[@]} "$id: $info (Unknown)")
+				output=(${output[@]} "$id | $info (Unknown)")
 			fi
 		else
 			if [ ${#id} = 2 ]
 			then
-				output=(${output[@]} "$id : $info (${timelist[$i]//'"'/''})")
+				output=(${output[@]} " $id | $info (${timelist[$i]//'"'/''})")
 			else
-				output=(${output[@]} "$id: $info (${timelist[$i]//'"'/''})")
+				output=(${output[@]} "$id | $info (${timelist[$i]//'"'/''})")
 			fi
 		fi
 		((i++)); ((n++))
@@ -1038,10 +1038,11 @@ function get_list()
 	unset n i
 
 	echo -e "\n"
+	sortedOutput=($(printf "%s\n" "${output[@]}" | sort -n))
 	n=1
-	for (( i=0; i<${#output[@]}; i++ ))
+	for (( i=0; i<${#sortedOutput[@]}; i++ ))
 	do
-		echo "[$n] ${output[$i]}"
+		echo "[$n] ${sortedOutput[$i]}"
 		((n++))
 	done
 	echo
