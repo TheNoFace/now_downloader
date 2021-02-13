@@ -1,6 +1,7 @@
-# Now Downloader
+# Now Downloader (DEV Branch)
 
 Bash script to download streaming from [NAVER NOW](https://now.naver.com)   
+**You're now on dev branch. To check out main branch, click [here](https://github.com/TheNoFace/now_downloader/tree/master)**
 
 ### Required packages
 
