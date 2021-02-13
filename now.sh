@@ -853,7 +853,7 @@ function timeupdate()
 {
 	d_date=$(date +'%y%m%d')
 	CTIME=$(date +'%H%M%S')
-	TIMECHECK=$(echo "($(date -d @$ORI_DATE +%H)*60+$(date -d @$ORI_DATE +%M))-($(date +%H)*60+$(date +%M))" | bc -l)
+	TIMECHECK=$(echo "($(date -d @$ORI_DATE +%H)*60+$(date -d @$ORI_DATE +%M))-($(date +%H)*60+$(date +%M))" | bc)
 	if [ "$vcheck" = 'true' ]
 	then
 		FILENAME="${d_date}.NAVER NOW.$title.E$ep.${subject}_VID_$CTIME"
