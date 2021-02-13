@@ -53,7 +53,7 @@ ITG_CHECK=""
 N_RETRY=""
 MAXRETRYSET=10
 CHKINTSET=30
-chatCheckInterval=5
+chatCheckInterval=1
 CUSTIMER=""
 SREASON=""
 VERB=""
@@ -455,21 +455,24 @@ function get_chat()
 	# timelist=($(curl -s $chatURL | jq -r '[.result.recentManagerCommentList[] | .regTime] | reverse[]'))
 	if [ "$managerOnly" = 1 ]
 	then
-		if [ -z $notFirst ] && [ $STATUS != "ONAIR" ]
+		if [ -z $notFirst ] && [ "$STATUS" = "END" ]
 		then
-			chatList=($(curl -s $chatURL | jq -r '.result.recentManagerCommentList[] | "[" + .regTime + "] " + .userName + ": " + .contents'))
+			chatList=($(curl -s $chatURL | jq -r '[.result.recentManagerCommentList[] | "[" + .regTime + "] " + .userName + ": " + .contents] | reverse[]'))
 		else
-			chatList=($(curl -s $chatURL | jq -r '.result.commentList[] | select(.manager == true) | "[" + .regTime + "] " + .userName + ": " + .contents'))
+			chatList=($(curl -s $chatURL | jq -r '[.result.commentList[] | select(.manager == true) | "[" + .regTime + "] " + .userName + ": " + .contents] | reverse[]'))
 		fi
 	elif [ "$managerOnly" = 0 ]
 	then
-		chatList=($(curl -s $chatURL | jq -r '.result.commentList[] | "[" + .regTime + "] " + .userName + ": " + .contents'))
+		chatList=($(curl -s $chatURL | jq -r '[.result.commentList[] | "[" + .regTime + "] " + .userName + ": " + .contents] | reverse[]'))
 	fi
 
-	preCount=${#sortedList[@]}
 	cumulatedList=(${cumulatedList[@]} ${chatList[@]})
-	sortedList=($(printf "%s\n" "${cumulatedList[@]}" | sort -u))
-	postCount=${#sortedList[@]}
+	# lastArrayItem=$(expr ${#cumulatedList[@]} - 1)
+	chatArrayStart=$(expr ${#cumulatedList[@]} - 20)
+	if [ -z $notFirst ]
+	then
+		sortedList=($(printf "%s\n" "${cumulatedList[@]}" | sort -u))
+	fi
 }
 
 function show_chat()
@@ -480,19 +483,23 @@ function show_chat()
 
 		if [ "$notFirst" = 1 ]
 		then
-			for (( i = $preCount; i < $postCount; i++ ))
+			unset sortedList listToPrint
+			# chatArrayStart=$(expr $chatArrayStart - 1)
+			for (( i = $chatArrayStart; i < ${#cumulatedList[@]}; i++ ))
 			do
-				echo "${sortedList[$i]}"
+				sortedList=(${sortedList[@]} ${cumulatedList[$i]})
 			done
+			listToPrint=($(printf "%s\n" "${sortedList[@]}" | sort -u))
+			printf "%s\n" "${listToPrint[@]}"
 		else
-			if [ -z $notFirst ] && [ $STATUS != "ONAIR" ] && [ "${#sortedList[@]}" != 0 ]
+			if [ -z $notFirst ] && [ "$STATUS" != "ONAIR" ] && [ "${#sortedList[@]}" != 0 ]
 			then
 				if [ "$managerOnly" = 1 ]
 				then
-					msg "Last ${#sortedList[@]} manager chat(s) saved by NOW:\n"
+					msg "Last ${#sortedList[@]} manager chat(s) saved in server:\n"
 				elif [ "$managerOnly" = 0 ]
 				then
-					msg "Last ${#sortedList[@]} chat(s) saved by NOW:\n"
+					msg "Last ${#sortedList[@]} chat(s) saved in server:\n"
 				fi
 				printf "%s\n" "${sortedList[@]}"
 				break
@@ -511,7 +518,7 @@ function show_chat()
 		fi
 		get_status
 
-		if [ $STATUS != "ONAIR" ]
+		if [ "$STATUS" = "END" ]
 		then
 			break
 		fi
@@ -526,6 +533,7 @@ function show_chat()
 		exit 0
 	else
 		echo
+		sortedList=($(printf "%s\n" "${cumulatedList[@]}" | sort -u))
 		info_msg -t "Status: $STATUS (cumulatedList: ${#cumulatedList[@]} / sortedList: ${#sortedList[@]})\n"
 		if [ "$managerOnly" = 1 ]
 		then
