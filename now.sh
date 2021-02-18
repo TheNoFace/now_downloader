@@ -1029,16 +1029,16 @@ function get_list()
 		then
 			if [ ${#id} = 2 ]
 			then
-				output=(${output[@]} "$id : $info (Unknown)")
+				output=(${output[@]} " $id | $info (Unknown)")
 			else
-				output=(${output[@]} "$id: $info (Unknown)")
+				output=(${output[@]} "$id | $info (Unknown)")
 			fi
 		else
 			if [ ${#id} = 2 ]
 			then
-				output=(${output[@]} "$id : $info (${timelist[$i]//'"'/''})")
+				output=(${output[@]} " $id | $info (${timelist[$i]//'"'/''})")
 			else
-				output=(${output[@]} "$id: $info (${timelist[$i]//'"'/''})")
+				output=(${output[@]} "$id | $info (${timelist[$i]//'"'/''})")
 			fi
 		fi
 		((i++)); ((n++))
@@ -1046,10 +1046,11 @@ function get_list()
 	unset n i
 
 	echo -e "\n"
+	sortedOutput=($(printf "%s\n" "${output[@]}" | sort -n))
 	n=1
-	for (( i=0; i<${#output[@]}; i++ ))
+	for (( i=0; i<${#sortedOutput[@]}; i++ ))
 	do
-		echo "[$n] ${output[$i]}"
+		echo "[$n] ${sortedOutput[$i]}"
 		((n++))
 	done
 	echo
