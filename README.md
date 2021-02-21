@@ -32,7 +32,8 @@ Options:
   -h  | --help                Show this help screen
         --info                Display detailed info of show and exits
   -k  | --keep                Do not delete original audio stream(.ts) file after download finishes
-  -ls | --list                List every show's ID and it's title and exits
+  -ls | --list                List every shows' ID and titles then exits
+        --list live           List shows' ID and titles that are currently on air
   -o  | --opath <dir>         Overrides output path to check if it's been set before
   -r  | --maxretry [number]   Maximum retries if download fails
                               Default is set to 10 times

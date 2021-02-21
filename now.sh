@@ -135,6 +135,12 @@ function get_parms()
 			-h|--help|-help)
 				print_help ; exit 0 ;;
 			-ls|--list)
+				if [ "$2" = 'live' ]
+				then
+					isListLive=1
+				else
+					isListLive=0
+				fi
 				get_list ; exit 0 ;;
 			-i|-id|--id)
 				SHOW_ID="$2" ; shift ; shift ;;
@@ -210,7 +216,8 @@ Options:
   -h  | --help                Show this help screen
         --info                Display detailed info of show and exits
   -k  | --keep                Do not delete original audio stream(.ts) file after download finishes
-  -ls | --list                List every show's ID and it's title and exits
+  -ls | --list                List every shows' ID and titles then exits
+        --list live           List shows' ID and titles that are currently on air
   -o  | --opath <dir>         Overrides output path to check if it's been set before
   -r  | --maxretry [number]   Maximum retries if download fails
                               Default is set to $MAXRETRYSET times
@@ -1017,29 +1024,34 @@ function get_list()
 {
 	package_check
 
-	idlist=($(curl -s https://now.naver.com/api/nnow/v1/stream/livelist | jq -r '.liveList[] | (.contentId|tostring)'))
-	IFS=$'\n' timelist=($(curl -s https://now.naver.com/api/nnow/v1/stream/livelist | jq '.liveList[] | .tobe')) # https://unix.stackexchange.com/a/184866
+	if [ $isListLive = 1 ]
+	then
+		liveList=$(curl -s https://now.naver.com/api/nnow/v1/stream/livelist)
+		idList=($(echo "$liveList" | jq -r '.liveList[] | (.contentId|tostring)'))
+		IFS=$'\n' airTimeList=($(echo "$liveList" | jq '.liveList[] | .tobe')) # https://unix.stackexchange.com/a/184866
+	elif [ $isListLive = 0 ]
+	then
+		bannerList=$(curl -s https://now.naver.com/api/nnow/v1/stream/bannertable)
+		idList=($(echo "$bannerList" | jq -r '.contentList[].banners[].contentId'))
+		IFS=$'\n' airTimeList=($(echo "$bannerList" | jq '.contentList[].banners[].time'))
+	fi
 
 	i=0; n=1
-	for id in "${idlist[@]}"
+	for id in "${idList[@]}"
 	do
-		echo -en "Updating list... ($n/${#idlist[@]})\r"
-		info=$(curl -s https://now.naver.com/api/nnow/v1/stream/${id}/content | jq -r '.contentList[] | .home.title.text')
-		if [ ${timelist[$i]} = '""' ]
+		if [ $isListLive = 1 ]
 		then
-			if [ ${#id} = 2 ]
-			then
-				output=(${output[@]} " $id | $info (Unknown)")
-			else
-				output=(${output[@]} "$id | $info (Unknown)")
-			fi
+			echo -en "Updating live list... ($n/${#idList[@]})\r"
+		elif [ $isListLive = 0 ]
+		then
+			echo -en "Updating banner list... ($n/${#idList[@]})\r"
+		fi
+		info=$(curl -s https://now.naver.com/api/nnow/v1/stream/${id}/content | jq -r '.contentList[] | .home.title.text')
+		if [ -z ${airTimeList[$i]} ]
+		then
+			output=(${output[@]} "$id | $info (Unknown)")
 		else
-			if [ ${#id} = 2 ]
-			then
-				output=(${output[@]} " $id | $info (${timelist[$i]//'"'/''})")
-			else
-				output=(${output[@]} "$id | $info (${timelist[$i]//'"'/''})")
-			fi
+			output=(${output[@]} "$id | $info (${airTimeList[$i]//'"'/''})")
 		fi
 		((i++)); ((n++))
 	done
