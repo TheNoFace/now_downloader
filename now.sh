@@ -484,8 +484,12 @@ function get_chat()
 	fi
 
 	cumulatedList=(${cumulatedList[@]} ${chatList[@]})
-	# lastArrayItem=$(expr ${#cumulatedList[@]} - 1)
-	chatArrayStart=$(expr ${#cumulatedList[@]} - 20)
+	if [ ${#cumulatedList[@]} -lt 20 ]
+	then
+		chatArrayStart=0
+	else
+		chatArrayStart=$[${#cumulatedList[@]} - 20]
+	fi
 	if [ -z $notFirst ]
 	then
 		sortedList=($(printf "%s\n" "${cumulatedList[@]}" | sort -u))
@@ -501,7 +505,6 @@ function show_chat()
 		if [ "$notFirst" = 1 ]
 		then
 			unset sortedList listToPrint
-			# chatArrayStart=$(expr $chatArrayStart - 1)
 			for (( i = $chatArrayStart; i < ${#cumulatedList[@]}; i++ ))
 			do
 				sortedList=(${sortedList[@]} ${cumulatedList[$i]})
