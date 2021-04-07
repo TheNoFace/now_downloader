@@ -130,11 +130,11 @@ function get_parms()
 	while :
 	do
 		case "$1" in
-			-v|--version|-version)
+			--version)
 				print_banner ; exit 0 ;;
-			-h|--help|-help)
+			--help)
 				print_help ; exit 0 ;;
-			-ls|--list)
+			-l|--list)
 				if [ "$2" = 'live' ]
 				then
 					isListLive=1
@@ -142,25 +142,25 @@ function get_parms()
 					isListLive=0
 				fi
 				get_list ; exit 0 ;;
-			-i|-id|--id)
+			-i|--id)
 				SHOW_ID="$2" ; shift ; shift ;;
 			-f|--force)
 				FORCE=1 ; shift ;;
 			-k|--keep)
 				KEEP=1 ; shift ;;
-			-o|--opath)
+			-o|--output)
 				OPATH_I="$2" ; shift ; shift ;;
-			-dc|--dcont)
+			-nc|--no-check)
 				ITG_CHECK=1 ; shift ;;
-			-r|--maxretry)
+			-r|--retry)
 				MAXRETRY="$2" ; shift ; shift ;;
-			-dr|--dretry)
+			-nr|--no-retry)
 				N_RETRY=1 ; shift ;;
-			-t|--chkint)
+			-t|--time-check)
 				CHKINT="$2" ; shift ; shift ;;
 			-c|--custimer)
 				CUSTIMER="$2" ; shift ; shift ;;
-			--verbose)
+			-v|--verbose)
 				VERB=1 ; shift ;;
 			-u|--user)
 				G_USR=1 ; shift ;;
@@ -206,27 +206,29 @@ function print_help()
 	echo "  -i  | --id [number]         ID of the show to download
 
 Options:
-  -c  | --custimer [seconds]  Custom sleep timer before starting script"
+  -c  | --custimer [second]   Custom sleep timer before starting script"
   	alert_msg "                              WARNING: Mandatory if today is not the broadcasting day"
-  	echo "        --chat                Print live or recent manager's chats and save into file
-        --chatall             Print live or recent chats and save into file
-  -dc | --dcont               Do not check integrity of content/livestatus files in content folder
-  -dr | --dretry              Disable retries (same as -r 0)
+  	echo "        --chat (all)          Print live or recent manager's chats and save into file
+                              all: Print live or recent chats and save into file
   -f  | --force               Start download immediately without any time checks
-  -h  | --help                Show this help screen
-        --info                Display detailed info of show and exits
+        --info                Display detailed info of the show
   -k  | --keep                Do not delete original audio stream(.ts) file after download finishes
-  -ls | --list                List every shows' ID and titles then exits
-        --list live           List shows' ID and titles that are currently on air
-  -o  | --opath <dir>         Overrides output path to check if it's been set before
-  -r  | --maxretry [number]   Maximum retries if download fails
+  -l  | --list (live)         List every shows' ID and titles then exits
+                              live: List shows' ID and titles that are currently on air
+  -nc | --no-check            Do not check integrity of content/livestatus files in content folder
+  -nr | --no-retry            Disable retries (same as -r 0)
+  -o  | --output <dir>        Overrides output path to check if it's been set before
+  -r  | --retry [number]      Maximum retries if download fails
                               Default is set to $MAXRETRYSET times
-  -t  | --chkint [seconds]    Check stream status if it has ended abnormally by checking file size
-  -u  | --user                Display current/total users of the show
+  -t  | --time-check [second] Check stream status if it has ended abnormally by checking file size
                               Default is set to $CHKINTSET seconds
-  -v  | --version             Show program name and version
-        --verbose             Print wget/youtube-dl/ffmpeg messages"
-	echo "Notes:
+  -u  | --user                Display current/total users of the show
+  -v  | --verbose             Print wget/youtube-dl/ffmpeg messages
+
+        --help                Show this help screen
+        --version             Show program name and version
+
+Notes:
   - Short options should not be grouped. You must pass each parameter on its own.
   - Disabling flags priors than setting flags
 
@@ -237,8 +239,9 @@ Example:
   - Download #495 show
   - Retries 100 times if download fails
   - Check stream status for every 60 seconds
-* $SCRIPT_NAME -i 495 -f -dr -k
+* $SCRIPT_NAME -i 495 -f -nr -nc -k
   - Do not retry download even if download fails
+  - Do not check integrity of content/livestatus files in content folder
   - Download #495 show immediately without checking time
   - Do not delete original audio stream file after download finishes
 "

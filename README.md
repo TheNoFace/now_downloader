@@ -22,26 +22,28 @@ Required:
   -i  | --id [number]         ID of the show to download
 
 Options:
-  -c  | --custimer [seconds]  Custom sleep timer before starting script
+  -c  | --custimer [second]   Custom sleep timer before starting script
                               WARNING: Mandatory if today is not the broadcasting day
-        --chat                Print live or recent manager's chats and save into file
-        --chatall             Print live or recent chats and save into file
-  -dc | --dcont               Do not check integrity of content/livestatus files in content folder
-  -dr | --dretry              Disable retries (same as -r 0)
+        --chat (all)          Print live or recent manager's chats and save into file
+                              all: Print live or recent chats and save into file
   -f  | --force               Start download immediately without any time checks
-  -h  | --help                Show this help screen
-        --info                Display detailed info of show and exits
+        --info                Display detailed info of the show
   -k  | --keep                Do not delete original audio stream(.ts) file after download finishes
-  -ls | --list                List every shows' ID and titles then exits
-        --list live           List shows' ID and titles that are currently on air
-  -o  | --opath <dir>         Overrides output path to check if it's been set before
-  -r  | --maxretry [number]   Maximum retries if download fails
+  -l  | --list (live)         List every shows' ID and titles then exits
+                              live: List shows' ID and titles that are currently on air
+  -nc | --no-check            Do not check integrity of content/livestatus files in content folder
+  -nr | --no-retry            Disable retries (same as -r 0)
+  -o  | --output <dir>        Overrides output path to check if it's been set before
+  -r  | --retry [number]      Maximum retries if download fails
                               Default is set to 10 times
-  -t  | --chkint [seconds]    Check stream status if it has ended abnormally by checking file size
-  -u  | --user                Display current/total users of the show
+  -t  | --time-check [second] Check stream status if it has ended abnormally by checking file size
                               Default is set to 30 seconds
-  -v  | --version             Show program name and version
-        --verbose             Print wget/youtube-dl/ffmpeg messages
+  -u  | --user                Display current/total users of the show
+  -v  | --verbose             Print wget/youtube-dl/ffmpeg messages
+
+        --help                Show this help screen
+        --version             Show program name and version
+
 Notes:
   - Short options should not be grouped. You must pass each parameter on its own.
   - Disabling flags priors than setting flags
@@ -53,8 +55,9 @@ Example:
   - Download #495 show
   - Retries 100 times if download fails
   - Check stream status for every 60 seconds
-* now.sh -i 495 -f -dr -k
+* now.sh -i 495 -f -nr -nc -k
   - Do not retry download even if download fails
+  - Do not check integrity of content/livestatus files in content folder
   - Download #495 show immediately without checking time
   - Do not delete original audio stream file after download finishes
 ```
