@@ -22,10 +22,11 @@ Required:
   -i  | --id [number]         ID of the show to download
 
 Options:
-  -c  | --custimer [second]   Custom sleep timer before starting script
-                              WARNING: Mandatory if today is not the broadcasting day
-        --chat (all)          Print live or recent manager's chats and save into file
-                              all: Print live or recent chats and save into file
+  -c  | --chat                Print live or recent host/manager's chats and save into file
+        --chat-all            Print live or recent chats and save into file
+                              NOTE: File is saved after the show has finished (ONAIR -> END)
+        --custimer [second]   Custom sleep timer before starting script
+                              NOTE: Mandatory if today is not the broadcasting day
   -f  | --force               Start download immediately without any time checks
         --info                Display detailed info of the show
   -k  | --keep                Do not delete original audio stream(.ts) file after download finishes

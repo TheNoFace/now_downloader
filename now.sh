@@ -135,8 +135,14 @@ function get_parms()
 			--help)
 				print_help ; exit 0 ;;
 			-l|--list)
+				availableArg="live"
 				if [ "$2" = 'live' ]
 				then
+					isListLive=1
+				elif [ -n "$2" ]
+				then
+					isError=1
+					errArg="$2"
 					isListLive=1
 				else
 					isListLive=0
@@ -158,7 +164,7 @@ function get_parms()
 				N_RETRY=1 ; shift ;;
 			-t|--time-check)
 				CHKINT="$2" ; shift ; shift ;;
-			-c|--custimer)
+			--custimer)
 				CUSTIMER="$2" ; shift ; shift ;;
 			-v|--verbose)
 				VERB=1 ; shift ;;
@@ -166,9 +172,9 @@ function get_parms()
 				G_USR=1 ; shift ;;
 			--info)
 				GetInfo=1 ; shift ;;
-			--chat)
+			-c|--chat)
 				showChat=1 ; managerOnly=1 ; shift ;;
-			--chatall)
+			--chat-all)
 				showChat=1 ; managerOnly=0 ; shift ;;
 			*)
 				check_invalid_parms "$1" ; break ;;
@@ -206,11 +212,12 @@ function print_help()
 	echo "  -i  | --id [number]         ID of the show to download
 
 Options:
-  -c  | --custimer [second]   Custom sleep timer before starting script"
-  	alert_msg "                              WARNING: Mandatory if today is not the broadcasting day"
-  	echo "        --chat (all)          Print live or recent manager's chats and save into file
-                              all: Print live or recent chats and save into file
-  -f  | --force               Start download immediately without any time checks
+  -c  | --chat                Print live or recent host/manager's chats and save into file
+        --chat-all            Print live or recent chats and save into file"
+	alert_msg "                              NOTE: File is saved after the show has finished (ONAIR -> END)"
+	echo "        --custimer [second]   Custom sleep timer before starting script"
+	alert_msg "                              NOTE: Mandatory if today is not the broadcasting day"
+	echo "  -f  | --force               Start download immediately without any time checks
         --info                Display detailed info of the show
   -k  | --keep                Do not delete original audio stream(.ts) file after download finishes
   -l  | --list (live)         List every shows' ID and titles then exits
@@ -1026,6 +1033,11 @@ function main()
 function get_list()
 {
 	package_check
+
+	if [ -n "$isError" ]
+	then
+		alert_msg "You have entered unknown argument: $errArg, did you mean '$availableArg'?"
+	fi
 
 	if [ $isListLive = 1 ]
 	then
