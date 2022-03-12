@@ -1044,14 +1044,14 @@ function get_list()
 
 	if [ $isListLive = 1 ]
 	then
-		liveList=$(curl -s https://now.naver.com/api/nnow/v1/stream/livelist)
+		liveList=$(curl -s https://apis.naver.com/now_web/nowapi-xhmac/nnow/v2/stream/livelist)
 		idList=($(echo "$liveList" | jq -r '.liveList[] | (.contentId|tostring)'))
-		IFS=$'\n' airTimeList=($(echo "$liveList" | jq '.liveList[] | .tobe')) # https://unix.stackexchange.com/a/184866
+		IFS=$'\n'; airTimeList=($(echo "$liveList" | jq '.liveList[] | .tobe')) # https://unix.stackexchange.com/a/184866
 	elif [ $isListLive = 0 ]
 	then
-		bannerList=$(curl -s https://now.naver.com/api/nnow/v1/stream/bannertable)
+		bannerList=$(curl -s https://apis.naver.com/now_web/nowapi-xhmac/nnow/v1/stream/bannertable)
 		idList=($(echo "$bannerList" | jq -r '.contentList[].banners[].contentId'))
-		IFS=$'\n' airTimeList=($(echo "$bannerList" | jq '.contentList[].banners[].time'))
+		IFS=$'\n'; airTimeList=($(echo "$bannerList" | jq '.contentList[].banners[].time'))
 	fi
 
 	i=0; n=1
@@ -1064,7 +1064,7 @@ function get_list()
 		then
 			echo -en "Updating banner list... ($n/${#idList[@]})\r"
 		fi
-		info=$(curl -s https://now.naver.com/api/nnow/v1/stream/${id}/content | jq -r '.contentList[] | .home.title.text')
+		info=$(curl -s https://apis.naver.com/now_web/nowapi-xhmac/nnow/v2/stream/${id}/content | jq -r '.contentList[] | .home.title.text')
 		if [ -z ${airTimeList[$i]} ]
 		then
 			output=(${output[@]} "$id | $info (Unknown)")
