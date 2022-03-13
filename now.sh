@@ -45,6 +45,8 @@ oriIFS=$IFS
 P_LIST=(bc jq curl wget youtube-dl ffmpeg)
 dirList=(content log show chat)
 
+NOW_LINK='https://apis.naver.com/now_web/nowapi-xhmac/nnow/v2/stream'
+
 SHOW_ID=""
 FORCE=""
 KEEP=""
@@ -350,7 +352,7 @@ function script_init()
 
 	if [ "$showChat" = 1 ]
 	then
-		livestatusURL="https://now.naver.com/api/nnow/v1/stream/$SHOW_ID/livestatus"
+		livestatusURL="${NOW_LINK}/$SHOW_ID/livestatus"
 		chatId=$(curl -s $livestatusURL | jq -r '.status.clientConfig.poll.comment.objectId')
 		chatURL="https://apis.naver.com/now_web/now-chat-api/list?object_id=$chatId"
 		show_chat
@@ -441,7 +443,7 @@ function script_init()
 
 function get_info()
 {
-	content=$(curl -s https://now.naver.com/api/nnow/v1/stream/$SHOW_ID/content)
+	content=$(curl -s "${NOW_LINK}/$SHOW_ID/content")
 	echo "$content" | jq -e '.contentList[].home.title.text' > /dev/null & JQPID=$!
 	wait $JQPID; ExitCode=$?
 
@@ -574,11 +576,13 @@ function show_chat()
 }
 
 # content: general information of show
-# livestatus: audio/video stream information of show
+# livestatus no longer provide stream URL, and it's replaced by streamURL
 function contentget()
 {
-	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
-	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.content" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content
+	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" ${NOW_LINK}/${SHOW_ID}/livestatus
+	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.content" ${NOW_LINK}/${SHOW_ID}/content
+	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.streamURL" ${NOW_LINK}/${SHOW_ID}
+
 	if [ -z $ITG_CHECK ]
 	then
 		ctlength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}.content" | awk '{print $1}')
@@ -597,8 +601,8 @@ function contentget()
 			do
 				((CTRETRY++))
 				msg "\n재시도 횟수: $CTRETRY / 최대 재시도 횟수: $MAXRETRY\n"
-				$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
-				$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.content" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content
+				$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" ${NOW_LINK}/${SHOW_ID}/livestatus
+				$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.content" ${NOW_LINK}/${SHOW_ID}/content
 				ctlength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}.content" | awk '{print $1}')
 				lslength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | awk '{print $1}')
 				msg "content: $ctlength Bytes / livestatus: $lslength Bytes"
@@ -645,6 +649,7 @@ function content_backup()
 {
 	mv "${OPATH}/content/${SHOW_ID}_${d_date}.content" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_$CTIME.content"
 	mv "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_$CTIME.livestatus"
+	mv "${OPATH}/content/${SHOW_ID}_${d_date}.streamURL" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_$CTIME.streamURL"
 	if [ -e "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.txt" ]
 	then
 		mv "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.txt" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_${CTIME}_LiveList.txt"
@@ -661,16 +666,16 @@ function getstream()
 		echo -e "Host: $showhost\nEP: $ep\n\n$subject\n\n$INFO" > "${OPATH}/show/$title/${d_date}_${showhost}_Info.txt"
 	fi
 
-	msg "\n방송시간: $starttime / 현재: $CTIME\n$title By $showhost E$ep $subject\n${OPATH}/show/$title/${FILENAME}.ts\n$url\n"
+	msg "방송시간: $starttime / 현재: $CTIME\n$title By $showhost E$ep $subject\n${OPATH}/show/$title/${FILENAME}.ts\n${url}\n"
 	#-ERROR-CHECK------------------------------------------------------
 	msg -t "Checking URL..."
-	curl -fsS "$url" > /dev/null & CURLPID=$!
+	curl -fsS "${url}" > /dev/null & CURLPID=$!
 	wait $CURLPID; ExitCode=$?
 
 	if [ $ExitCode = 0 ]
 	then
 		info_msg -t "Valid URL, Proceeding..."
-		$youtube_c --hls-use-mpegts --no-part "$url" --output "${OPATH}/show/$title/${FILENAME}.ts" & YPID=$!
+		$youtube_c --hls-use-mpegts --no-part "${url}" --output "${OPATH}/show/$title/${FILENAME}.ts" & YPID=$!
 	else
 		err_msg -t "Invalid URL, retrying...\n"
 		contentget
@@ -801,7 +806,7 @@ function convert()
 		fi
 	fi
 
-	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
+	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" ${NOW_LINK}/${SHOW_ID}/livestatus
 	total_user=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'cumulativeUserCount":\K[^}]+')
 	msg "\n오늘 총 조회수: $total_user"
 
@@ -824,12 +829,13 @@ function exrefresh()
 	showhost=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.content" | grep -oP '호스트: \K[^\\r]+' | head -n 1)
 	title=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.content" | grep -oP 'home":{"title":{"text":"\K[^"]+')
 	vcheck=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.content" | grep -oP 'video":\K[^,]+')
-	if [ "$vcheck" = 'true' ]
-	then
-		url=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'videoStreamUrl":"\K[^"]+')
-	else
-		url=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'liveStreamUrl":"\K[^"]+')
-	fi
+	# if [ "$vcheck" = 'true' ]
+	# then
+	# 	url=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'videoStreamUrl":"\K[^"]+')
+	# else
+	# 	url=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'liveStreamUrl":"\K[^"]+')
+	# fi
+	url=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.streamURL" | jq -r .hls_url)
 	ORI_DATE=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'startDatetime":"\K[^"]+' | xargs -i date -d {} +%s) # Seconds since 1970-01-01 00:00:00 UTC
 	startdate=$(date -d @$ORI_DATE +'%y%m%d')
 	starttime=$(date -d @$ORI_DATE +'%H%M%S')
@@ -841,7 +847,7 @@ function exrefresh()
 
 	if [ -z "$G_USR" ]
 	then
-		if [ -z "$url" ] || [ -z "$title" ] || [ -z "$startdate" ] || [ -z "$starttime" ] || [ -z "$STATUS" ]
+		if [ -z "${url}" ] || [ -z "$title" ] || [ -z "$startdate" ] || [ -z "$starttime" ] || [ -z "$STATUS" ]
 		then
 			if [ "$MAXRETRY" = "0" ]
 			then
@@ -867,7 +873,7 @@ function exrefresh()
 				content_backup
 				exit 1
 			fi
-			msg "\nSTARTDATE: $startdate\nSTARTTIME: $starttime\nTITLE:$title\nURL:$url\n"
+			msg "\nSTARTDATE: $startdate\nSTARTTIME: $starttime\nTITLE:$title\nURL:${url}\n"
 			msg "Retrying...\n"
 			contentget
 			exrefresh
@@ -895,7 +901,7 @@ function timeupdate()
 
 function get_status()
 {
-	STATUS=$(curl -s https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus | jq -r .[].status)
+	STATUS=$(curl -s ${NOW_LINK}/${SHOW_ID}/livestatus | jq -r .[].status)
 }
 
 function counter()
@@ -984,9 +990,9 @@ function onairwait()
 function main()
 {
 	# Live Status
-	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.html" https://now.naver.com/api/nnow/v1/stream/livelist
-	jq '.liveList[]' "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.html" > "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.txt"
-	rm "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.html"
+	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.json" ${NOW_LINK}/livelist
+	jq '.liveList[]' "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.json" > "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.txt"
+	rm "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.json"
 
 	contentget
 	exrefresh
@@ -1044,12 +1050,12 @@ function get_list()
 
 	if [ $isListLive = 1 ]
 	then
-		liveList=$(curl -s https://apis.naver.com/now_web/nowapi-xhmac/nnow/v2/stream/livelist)
+		liveList=$(curl -s ${NOW_LINK}/livelist)
 		idList=($(echo "$liveList" | jq -r '.liveList[] | (.contentId|tostring)'))
 		IFS=$'\n'; airTimeList=($(echo "$liveList" | jq '.liveList[] | .tobe')) # https://unix.stackexchange.com/a/184866
 	elif [ $isListLive = 0 ]
 	then
-		bannerList=$(curl -s https://apis.naver.com/now_web/nowapi-xhmac/nnow/v1/stream/bannertable)
+		bannerList=$(curl -s ${NOW_LINK}/bannertable)
 		idList=($(echo "$bannerList" | jq -r '.contentList[].banners[].contentId'))
 		IFS=$'\n'; airTimeList=($(echo "$bannerList" | jq '.contentList[].banners[].time'))
 	fi
@@ -1064,7 +1070,7 @@ function get_list()
 		then
 			echo -en "Updating banner list... ($n/${#idList[@]})\r"
 		fi
-		info=$(curl -s https://apis.naver.com/now_web/nowapi-xhmac/nnow/v2/stream/${id}/content | jq -r '.contentList[] | .home.title.text')
+		info=$(curl -s ${NOW_LINK}/${id}/content | jq -r '.contentList[] | .home.title.text')
 		if [ -z ${airTimeList[$i]} ]
 		then
 			output=(${output[@]} "$id | $info (Unknown)")
