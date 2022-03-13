@@ -453,8 +453,8 @@ function get_info()
 		exit 6
 	fi
 
-	showhost=$(echo "$content" | grep -oP '호스트: \K[^\\r]+' | head -n 1)
-	guest=$(echo "$content" | jq -r '.contentList[] | (.description.clova.guest|join(","))')
+	showhost=$(echo "$content" | jq -r '.contentList[] | (.description.clova.host | join(", "))')
+	guest=$(echo "$content" | jq -r '.contentList[] | (.description.clova.guest | join(","))')
 	if [ -z "$guest" ]
 	then
 		info=$(echo "$content" | jq -r '.contentList[] | .home.title.text + " by HOST" + " (ID: " + .contentId + " / 보쇼: " + (.video|tostring)+ ")" + "\n\n" + .title.text + "\n\n" + .description.text | sub("false"; "X") | sub("true"; "O")')
