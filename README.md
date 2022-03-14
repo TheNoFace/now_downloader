@@ -1,10 +1,7 @@
-# Now Downloader (DEV Branch)
-
+# Now Downloader
 Bash script to download streaming from [NAVER NOW](https://now.naver.com)   
-**You're now on dev branch. To check out main branch, click [here](https://github.com/TheNoFace/now_downloader/tree/master)**
 
 ### Required packages
-
 If you want to run this script using crontab, then make sure you can run below commands in crontab. (not local)
 
 - wget
