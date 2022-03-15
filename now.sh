@@ -37,13 +37,15 @@ else
 	NC=""
 fi
 
-NDV="1.4.2"
+NDV="1.4.3-dev"
 BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
 oriIFS=$IFS
 
 P_LIST=(bc jq curl wget youtube-dl ffmpeg)
 dirList=(content log show chat)
+
+NOW_LINK='https://apis.naver.com/now_web/nowapi-xhmac/nnow/v2/stream'
 
 SHOW_ID=""
 FORCE=""
@@ -130,39 +132,51 @@ function get_parms()
 	while :
 	do
 		case "$1" in
-			-v|--version|-version)
+			--version)
 				print_banner ; exit 0 ;;
-			-h|--help|-help)
+			--help)
 				print_help ; exit 0 ;;
-			-ls|--list)
+			-l|--list)
+				availableArg="live"
+				if [ "$2" = 'live' ]
+				then
+					isListLive=1
+				elif [ -n "$2" ]
+				then
+					isError=1
+					errArg="$2"
+					isListLive=1
+				else
+					isListLive=0
+				fi
 				get_list ; exit 0 ;;
-			-i|-id|--id)
+			-i|--id)
 				SHOW_ID="$2" ; shift ; shift ;;
 			-f|--force)
 				FORCE=1 ; shift ;;
 			-k|--keep)
 				KEEP=1 ; shift ;;
-			-o|--opath)
+			-o|--output)
 				OPATH_I="$2" ; shift ; shift ;;
-			-dc|--dcont)
+			-nc|--no-check)
 				ITG_CHECK=1 ; shift ;;
-			-r|--maxretry)
+			-r|--retry)
 				MAXRETRY="$2" ; shift ; shift ;;
-			-dr|--dretry)
+			-nr|--no-retry)
 				N_RETRY=1 ; shift ;;
-			-t|--chkint)
+			-t|--time-check)
 				CHKINT="$2" ; shift ; shift ;;
-			-c|--custimer)
+			--custimer)
 				CUSTIMER="$2" ; shift ; shift ;;
-			--verbose)
+			-v|--verbose)
 				VERB=1 ; shift ;;
 			-u|--user)
 				G_USR=1 ; shift ;;
 			--info)
 				GetInfo=1 ; shift ;;
-			--chat)
+			-c|--chat)
 				showChat=1 ; managerOnly=1 ; shift ;;
-			--chatall)
+			--chat-all)
 				showChat=1 ; managerOnly=0 ; shift ;;
 			*)
 				check_invalid_parms "$1" ; break ;;
@@ -200,26 +214,30 @@ function print_help()
 	echo "  -i  | --id [number]         ID of the show to download
 
 Options:
-  -c  | --custimer [seconds]  Custom sleep timer before starting script"
-  	alert_msg "                              WARNING: Mandatory if today is not the broadcasting day"
-  	echo "        --chat                Print live or recent manager's chats and save into file
-        --chatall             Print live or recent chats and save into file
-  -dc | --dcont               Do not check integrity of content/livestatus files in content folder
-  -dr | --dretry              Disable retries (same as -r 0)
-  -f  | --force               Start download immediately without any time checks
-  -h  | --help                Show this help screen
-        --info                Display detailed info of show and exits
+  -c  | --chat                Print live or recent host/manager's chats and save into file
+        --chat-all            Print live or recent chats and save into file"
+	alert_msg "                              NOTE: File is saved after the show has finished (ONAIR -> END)"
+	echo "        --custimer [second]   Custom sleep timer before starting script"
+	alert_msg "                              NOTE: Mandatory if today is not the broadcasting day"
+	echo "  -f  | --force               Start download immediately without any time checks
+        --info                Display detailed info of the show
   -k  | --keep                Do not delete original audio stream(.ts) file after download finishes
-  -ls | --list                List every show's ID and it's title and exits
-  -o  | --opath <dir>         Overrides output path to check if it's been set before
-  -r  | --maxretry [number]   Maximum retries if download fails
+  -l  | --list (live)         List every shows' ID and titles then exits
+                              live: List shows' ID and titles that are currently on air
+  -nc | --no-check            Do not check integrity of content/livestatus files in content folder
+  -nr | --no-retry            Disable retries (same as -r 0)
+  -o  | --output <dir>        Overrides output path to check if it's been set before
+  -r  | --retry [number]      Maximum retries if download fails
                               Default is set to $MAXRETRYSET times
-  -t  | --chkint [seconds]    Check stream status if it has ended abnormally by checking file size
-  -u  | --user                Display current/total users of the show
+  -t  | --time-check [second] Check stream status if it has ended abnormally by checking file size
                               Default is set to $CHKINTSET seconds
-  -v  | --version             Show program name and version
-        --verbose             Print wget/youtube-dl/ffmpeg messages"
-	echo "Notes:
+  -u  | --user                Display current/total users of the show
+  -v  | --verbose             Print wget/youtube-dl/ffmpeg messages
+
+        --help                Show this help screen
+        --version             Show program name and version
+
+Notes:
   - Short options should not be grouped. You must pass each parameter on its own.
   - Disabling flags priors than setting flags
 
@@ -230,8 +248,9 @@ Example:
   - Download #495 show
   - Retries 100 times if download fails
   - Check stream status for every 60 seconds
-* $SCRIPT_NAME -i 495 -f -dr -k
+* $SCRIPT_NAME -i 495 -f -nr -nc -k
   - Do not retry download even if download fails
+  - Do not check integrity of content/livestatus files in content folder
   - Download #495 show immediately without checking time
   - Do not delete original audio stream file after download finishes
 "
@@ -333,7 +352,7 @@ function script_init()
 
 	if [ "$showChat" = 1 ]
 	then
-		livestatusURL="https://now.naver.com/api/nnow/v1/stream/$SHOW_ID/livestatus"
+		livestatusURL="${NOW_LINK}/$SHOW_ID/livestatus"
 		chatId=$(curl -s $livestatusURL | jq -r '.status.clientConfig.poll.comment.objectId')
 		chatURL="https://apis.naver.com/now_web/now-chat-api/list?object_id=$chatId"
 		show_chat
@@ -408,10 +427,10 @@ function script_init()
 	then
 		contentget
 		exrefresh
-		cur_user=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'concurrentUserCount":\K[^,]+')
-		total_user=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'cumulativeUserCount":\K[^}]+')
+		cur_user=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" | grep -oP 'concurrentUserCount":\K[^,]+')
+		total_user=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" | grep -oP 'cumulativeUserCount":\K[^}]+')
 
-		msg "\n$startdate $title by $showhost\n$subject"
+		msg "\n$startdate $title by ${showhost}\n$subject"
 		if [ "$STATUS" = "ONAIR" ]
 		then
 			msg "방송 상태: ${RED}$STATUS${NC}\n접속자 수: $cur_user / 오늘 총 조회수: $total_user\n"
@@ -424,7 +443,7 @@ function script_init()
 
 function get_info()
 {
-	content=$(curl -s https://now.naver.com/api/nnow/v1/stream/$SHOW_ID/content)
+	content=$(curl -s "${NOW_LINK}/$SHOW_ID/content")
 	echo "$content" | jq -e '.contentList[].home.title.text' > /dev/null & JQPID=$!
 	wait $JQPID; ExitCode=$?
 
@@ -434,16 +453,15 @@ function get_info()
 		exit 6
 	fi
 
-	showhost=$(echo "$content" | grep -oP '호스트: \K[^\\r]+' | head -n 1)
-	guest=$(echo "$content" | jq -r '.contentList[] | (.description.clova.guest|join(","))')
+	guest=$(echo "$content" | jq -r '.contentList[] | (.description.clova.guest | join(","))')
 	if [ -z "$guest" ]
 	then
-		info=$(echo "$content" | jq -r '.contentList[] | .home.title.text + " by HOST" + " (ID: " + .contentId + " / 보쇼: " + (.video|tostring)+ ")" + "\n\n" + .title.text + "\n\n" + .description.text | sub("false"; "X") | sub("true"; "O")')
+		info=$(echo "$content" | jq -r '.contentList[] | .home.title.text + " by " + (.description.clova.host | join(", ")) + " (ID: " + .contentId + " / Video: " + (.video|tostring)+ ")" + "\n\n" + .title.text + "\n\n" + .description.text | sub("false"; "X") | sub("true"; "O")')
 	else
-		info=$(echo "$content" | jq -r '.contentList[] | .home.title.text + " by HOST" + " (ID: " + .contentId + " / 보쇼: " + (.video|tostring)+ ")" + "\n게스트: " + (.description.clova.guest|join(",")) + "\n\n" + .title.text + "\n\n" + .description.text | sub("false"; "X") | sub("true"; "O")')
+		info=$(echo "$content" | jq -r '.contentList[] | .home.title.text + " by " + (.description.clova.host | join(", ")) + " (ID: " + .contentId + " / Video: " + (.video|tostring)+ ")" + "\nGuest: " + (.description.clova.guest|join(",")) + "\n\n" + .title.text + "\n\n" + .description.text | sub("false"; "X") | sub("true"; "O")')
 	fi
 
-	echo -e "${info/HOST/$showhost}\n"
+	msg "${info}\n"
 	exit 0
 }
 
@@ -455,21 +473,28 @@ function get_chat()
 	# timelist=($(curl -s $chatURL | jq -r '[.result.recentManagerCommentList[] | .regTime] | reverse[]'))
 	if [ "$managerOnly" = 1 ]
 	then
-		if [ -z $notFirst ] && [ $STATUS != "ONAIR" ]
+		if [ -z $notFirst ] && [ "$STATUS" = "END" ]
 		then
-			chatList=("$(curl -s $chatURL | jq -r '.result.recentManagerCommentList[] | "[" + .regTime + "] " + .userName + ": " + .contents')")
+			chatList=($(curl -s $chatURL | jq -r '[.result.recentManagerCommentList[] | "[" + .regTime + "] " + .userName + ": " + .contents] | reverse[]'))
 		else
-			chatList=("$(curl -s $chatURL | jq -r '.result.commentList[] | select(.manager == true) | "[" + .regTime + "] " + .userName + ": " + .contents')")
+			chatList=($(curl -s $chatURL | jq -r '[.result.commentList[] | select(.manager == true) | "[" + .regTime + "] " + .userName + ": " + .contents] | reverse[]'))
 		fi
 	elif [ "$managerOnly" = 0 ]
 	then
-		chatList=("$(curl -s $chatURL | jq -r '.result.commentList[] | "[" + .regTime + "] " + .userName + ": " + .contents')")
+		chatList=($(curl -s $chatURL | jq -r '[.result.commentList[] | "[" + .regTime + "] " + .userName + ": " + .contents] | reverse[]'))
 	fi
 
-	preCount=${#sortedList[@]}
-	cumulatedList=(${cumulatedList[@]} "${chatList[@]}")
-	sortedList=($(printf "%s\n" "${cumulatedList[@]}" | sort -u))
-	postCount=${#sortedList[@]}
+	cumulatedList=(${cumulatedList[@]} ${chatList[@]})
+	if [ ${#cumulatedList[@]} -lt 20 ]
+	then
+		chatArrayStart=0
+	else
+		chatArrayStart=$[${#cumulatedList[@]} - 20]
+	fi
+	if [ -z $notFirst ]
+	then
+		sortedList=($(printf "%s\n" "${cumulatedList[@]}" | sort -u))
+	fi
 }
 
 function show_chat()
@@ -480,19 +505,22 @@ function show_chat()
 
 		if [ "$notFirst" = 1 ]
 		then
-			for (( i = $preCount; i < $postCount; i++ ))
+			unset sortedList listToPrint
+			for (( i = $chatArrayStart; i < ${#cumulatedList[@]}; i++ ))
 			do
-				echo "${sortedList[$i]}"
+				sortedList=(${sortedList[@]} ${cumulatedList[$i]})
 			done
+			listToPrint=($(printf "%s\n" "${sortedList[@]}" | sort -u))
+			printf "%s\n" "${listToPrint[@]}"
 		else
-			if [ -z $notFirst ] && [ $STATUS != "ONAIR" ] && [ "${#sortedList[@]}" != 0 ]
+			if [ -z $notFirst ] && [ "$STATUS" != "ONAIR" ] && [ "${#sortedList[@]}" != 0 ]
 			then
 				if [ "$managerOnly" = 1 ]
 				then
-					msg "Last ${#sortedList[@]} manager chat(s) saved by NOW:\n"
+					msg "Last ${#sortedList[@]} manager chat(s) saved in server:\n"
 				elif [ "$managerOnly" = 0 ]
 				then
-					msg "Last ${#sortedList[@]} chat(s) saved by NOW:\n"
+					msg "Last ${#sortedList[@]} chat(s) saved in server:\n"
 				fi
 				printf "%s\n" "${sortedList[@]}"
 				break
@@ -511,7 +539,7 @@ function show_chat()
 		fi
 		get_status
 
-		if [ $STATUS != "ONAIR" ]
+		if [ "$STATUS" = "END" ]
 		then
 			break
 		fi
@@ -526,6 +554,7 @@ function show_chat()
 		exit 0
 	else
 		echo
+		sortedList=($(printf "%s\n" "${cumulatedList[@]}" | sort -u))
 		info_msg -t "Status: $STATUS (cumulatedList: ${#cumulatedList[@]} / sortedList: ${#sortedList[@]})\n"
 		if [ "$managerOnly" = 1 ]
 		then
@@ -546,15 +575,17 @@ function show_chat()
 }
 
 # content: general information of show
-# livestatus: audio/video stream information of show
+# livestatus no longer provide stream URL, and it's replaced by streamURL
 function contentget()
 {
-	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
-	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.content" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content
+	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" ${NOW_LINK}/${SHOW_ID}/livestatus
+	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.content.json" ${NOW_LINK}/${SHOW_ID}/content
+	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.streamURL.json" ${NOW_LINK}/${SHOW_ID}
+
 	if [ -z $ITG_CHECK ]
 	then
-		ctlength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}.content" | awk '{print $1}')
-		lslength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | awk '{print $1}')
+		ctlength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}.content.json" | awk '{print $1}')
+		lslength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" | awk '{print $1}')
 		msg "content: $ctlength Bytes / livestatus: $lslength Bytes"
 		if [ "$ctlength" -lt 2500 ] && [ "$lslength" -lt 1000 ]
 		then
@@ -569,10 +600,10 @@ function contentget()
 			do
 				((CTRETRY++))
 				msg "\n재시도 횟수: $CTRETRY / 최대 재시도 횟수: $MAXRETRY\n"
-				$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
-				$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.content" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/content
-				ctlength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}.content" | awk '{print $1}')
-				lslength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | awk '{print $1}')
+				$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" ${NOW_LINK}/${SHOW_ID}/livestatus
+				$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.content.json" ${NOW_LINK}/${SHOW_ID}/content
+				ctlength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}.content.json" | awk '{print $1}')
+				lslength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" | awk '{print $1}')
 				msg "content: $ctlength Bytes / livestatus: $lslength Bytes"
 				if [ "$ctlength" -lt 2500 ] && [ "$lslength" -lt 1000 ]
 				then
@@ -615,11 +646,12 @@ function contentget()
 
 function content_backup()
 {
-	mv "${OPATH}/content/${SHOW_ID}_${d_date}.content" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_$CTIME.content"
-	mv "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_$CTIME.livestatus"
-	if [ -e "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.txt" ]
+	mv "${OPATH}/content/${SHOW_ID}_${d_date}.content.json" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_$CTIME.content.json"
+	mv "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_$CTIME.livestatus.json"
+	mv "${OPATH}/content/${SHOW_ID}_${d_date}.streamURL.json" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_$CTIME.streamURL.json"
+	if [ -e "${OPATH}/content/${SHOW_ID}_${d_date}_livelist.json" ]
 	then
-		mv "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.txt" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_${CTIME}_LiveList.txt"
+		mv "${OPATH}/content/${SHOW_ID}_${d_date}_livelist.json" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_${CTIME}_livelist.json"
 	fi
 }
 
@@ -629,20 +661,20 @@ function getstream()
 
 	if [ $RETRY = 0 ]
 	then
-		INFO=$(jq -r '.contentList[].description.text' "${OPATH}/content/${SHOW_ID}_${d_date}.content")
-		echo -e "Host: $showhost\nEP: $ep\n\n$subject\n\n$INFO" > "${OPATH}/show/$title/${d_date}_${showhost}_Info.txt"
+		INFO=$(jq -r '.contentList[].description.text' "${OPATH}/content/${SHOW_ID}_${d_date}.content.json")
+		echo -e "Host: ${showhost}\nEP: $ep\n\n$subject\n\n$INFO" > "${OPATH}/show/$title/${d_date}_${showhost}_Info.txt"
 	fi
 
-	msg "\n방송시간: $starttime / 현재: $CTIME\n$title By $showhost E$ep $subject\n${OPATH}/show/$title/${FILENAME}.ts\n$url\n"
+	msg "\n방송시간: $starttime / 현재: $CTIME\n$title By ${showhost} E$ep $subject\n${OPATH}/show/$title/${FILENAME}.ts\n${url}\n"
 	#-ERROR-CHECK------------------------------------------------------
 	msg -t "Checking URL..."
-	curl -fsS "$url" > /dev/null & CURLPID=$!
+	curl -fsS "${url}" > /dev/null 2>&1 & CURLPID=$!
 	wait $CURLPID; ExitCode=$?
 
 	if [ $ExitCode = 0 ]
 	then
 		info_msg -t "Valid URL, Proceeding..."
-		$youtube_c --hls-use-mpegts --no-part "$url" --output "${OPATH}/show/$title/${FILENAME}.ts" & YPID=$!
+		$youtube_c --hls-use-mpegts --no-part "${url}" --output "${OPATH}/show/$title/${FILENAME}.ts" & YPID=$!
 	else
 		err_msg -t "Invalid URL, retrying...\n"
 		contentget
@@ -773,8 +805,8 @@ function convert()
 		fi
 	fi
 
-	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus
-	total_user=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'cumulativeUserCount":\K[^}]+')
+	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" ${NOW_LINK}/${SHOW_ID}/livestatus
+	total_user=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" | grep -oP 'cumulativeUserCount":\K[^}]+')
 	msg "\n오늘 총 조회수: $total_user"
 
 	info_msg "\nJob Finished, Code: $SREASON\n"
@@ -793,27 +825,32 @@ function renamer()
 function exrefresh()
 {
 	unset url title startdate starttime
-	showhost=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.content" | grep -oP '호스트: \K[^\\r]+' | head -n 1)
-	title=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.content" | grep -oP 'home":{"title":{"text":"\K[^"]+')
-	vcheck=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.content" | grep -oP 'video":\K[^,]+')
-	if [ "$vcheck" = 'true' ]
-	then
-		url=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'videoStreamUrl":"\K[^"]+')
-	else
-		url=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'liveStreamUrl":"\K[^"]+')
-	fi
-	ORI_DATE=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP 'startDatetime":"\K[^"]+' | xargs -i date -d {} +%s) # Seconds since 1970-01-01 00:00:00 UTC
+	local content livestatus
+	content=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.content.json")
+	livestatus=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json")
+
+	showhost=$(echo "${content}" | jq -r '.contentList[] | (.description.clova.host | join(", "))')
+	title=$(echo "${content}" | grep -oP 'home":{"title":{"text":"\K[^"]+')
+	vcheck=$(echo "${content}" | grep -oP 'video":\K[^,]+')
+	# if [ "$vcheck" = 'true' ]
+	# then
+	# 	url=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" | grep -oP 'videoStreamUrl":"\K[^"]+')
+	# else
+	# 	url=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" | grep -oP 'liveStreamUrl":"\K[^"]+')
+	# fi
+	url=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.streamURL.json" | jq -r .hls_url)
+	ORI_DATE=$(echo "${livestatus}" | grep -oP 'startDatetime":"\K[^"]+' | xargs -i date -d {} +%s) # Seconds since 1970-01-01 00:00:00 UTC
 	startdate=$(date -d @$ORI_DATE +'%y%m%d')
 	starttime=$(date -d @$ORI_DATE +'%H%M%S')
-	subject=$(jq '.contentList[].title.text' "${OPATH}/content/${SHOW_ID}_${d_date}.content")
-	ep=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.content" | grep -oP '"count":"\K[^회"]+')
-	STATUS=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus" | grep -oP ${SHOW_ID}'","status":"\K[^"]+') # READY | END | ONAIR
+	subject=$(echo "${content}" | jq '.contentList[].title.text')
+	ep=$(echo "${content}" | grep -oP '"count":"\K[^회"]+')
+	STATUS=$(echo "${livestatus}" | grep -oP ${SHOW_ID}'","status":"\K[^"]+') # READY | END | ONAIR
 
 	renamer "$subject" subject
 
 	if [ -z "$G_USR" ]
 	then
-		if [ -z "$url" ] || [ -z "$title" ] || [ -z "$startdate" ] || [ -z "$starttime" ] || [ -z "$STATUS" ]
+		if [ -z "${url}" ] || [ -z "$title" ] || [ -z "$startdate" ] || [ -z "$starttime" ] || [ -z "$STATUS" ]
 		then
 			if [ "$MAXRETRY" = "0" ]
 			then
@@ -839,7 +876,7 @@ function exrefresh()
 				content_backup
 				exit 1
 			fi
-			msg "\nSTARTDATE: $startdate\nSTARTTIME: $starttime\nTITLE:$title\nURL:$url\n"
+			msg "\nSTARTDATE: $startdate\nSTARTTIME: $starttime\nTITLE:$title\nURL:${url}\n"
 			msg "Retrying...\n"
 			contentget
 			exrefresh
@@ -867,7 +904,7 @@ function timeupdate()
 
 function get_status()
 {
-	STATUS=$(curl -s https://now.naver.com/api/nnow/v1/stream/${SHOW_ID}/livestatus | jq -r .[].status)
+	STATUS=$(curl -s ${NOW_LINK}/${SHOW_ID}/livestatus | jq -r .[].status)
 }
 
 function counter()
@@ -901,8 +938,8 @@ function onairwait()
 	do
 		if [ "$TIMECHECK" -le -15 ]
 		then
-			line=$(expr $(grep -n '"contentId": "'${SHOW_ID}'"' "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.txt" | cut -d : -f 1) + 3)
-			b_day=$(sed -n ${line}p "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.txt" | cut -d '"' -f 4)
+			line=$(expr $(grep -n '"contentId": "'${SHOW_ID}'"' "${OPATH}/content/${SHOW_ID}_${d_date}_livelist.json" | cut -d : -f 1) + 3)
+			b_day=$(sed -n ${line}p "${OPATH}/content/${SHOW_ID}_${d_date}_livelist.json" | cut -d '"' -f 4)
 			err_msg "\nERROR: 시작시간과 15분 이상 차이 발생\n금일 방송 유무를 확인해주세요"
 			err_msg "\n쇼 이름: $title\n방송 시간: $b_day (KST)\n"
 			content_backup
@@ -956,9 +993,9 @@ function onairwait()
 function main()
 {
 	# Live Status
-	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.html" https://now.naver.com/api/nnow/v1/stream/livelist
-	jq '.liveList[]' "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.html" > "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.txt"
-	rm "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.html"
+	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.json" ${NOW_LINK}/livelist
+	jq '.liveList[]' "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.json" > "${OPATH}/content/${SHOW_ID}_${d_date}_livelist.json"
+	rm "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.json"
 
 	contentget
 	exrefresh
@@ -976,7 +1013,7 @@ function main()
 		alert_msg "\n비디오 스트림 없음, 오디오만 다운로드 합니다\n"
 	fi
 
-	msg "방송일  : $startdate / 오늘: ${d_date}\n방송시간: $starttime / 현재: $CTIME\n$title By $showhost\nE$ep $subject"
+	msg "방송일  : $startdate / 오늘: ${d_date}\n방송시간: $starttime / 현재: $CTIME\n$title By ${showhost}\nE$ep $subject"
 
 	if [ -n "$CUSTIMER" ]
 	then
@@ -994,14 +1031,14 @@ function main()
 
 	if [ "$STATUS" = "ONAIR" ]
 	then
-		msg "Live Status: ${RED}$STATUS${NC}\n"
-		getstream 1
+		msg "Live Status: ${RED}$STATUS${NC}"
+		getstream ONAIR
 	else
 		onairwait
 		contentget
 		exrefresh
 		timeupdate
-		getstream 2
+		getstream WAIT
 	fi
 }
 
@@ -1009,29 +1046,39 @@ function get_list()
 {
 	package_check
 
-	idlist=($(curl -s https://now.naver.com/api/nnow/v1/stream/livelist | jq -r '.liveList[] | (.contentId|tostring)'))
-	IFS=$'\n' timelist=($(curl -s https://now.naver.com/api/nnow/v1/stream/livelist | jq '.liveList[] | .tobe')) # https://unix.stackexchange.com/a/184866
+	if [ -n "$isError" ]
+	then
+		alert_msg "You have entered unknown argument: $errArg, did you mean '$availableArg'?"
+	fi
+
+	if [ $isListLive = 1 ]
+	then
+		liveList=$(curl -s ${NOW_LINK}/livelist)
+		idList=($(echo "$liveList" | jq -r '.liveList[] | (.contentId|tostring)'))
+		IFS=$'\n'; airTimeList=($(echo "$liveList" | jq '.liveList[] | .tobe')) # https://unix.stackexchange.com/a/184866
+	elif [ $isListLive = 0 ]
+	then
+		bannerList=$(curl -s ${NOW_LINK}/bannertable)
+		idList=($(echo "$bannerList" | jq -r '.contentList[].banners[].contentId'))
+		IFS=$'\n'; airTimeList=($(echo "$bannerList" | jq '.contentList[].banners[].time'))
+	fi
 
 	i=0; n=1
-	for id in "${idlist[@]}"
+	for id in "${idList[@]}"
 	do
-		echo -en "Updating list... ($n/${#idlist[@]})\r"
-		info=$(curl -s https://now.naver.com/api/nnow/v1/stream/${id}/content | jq -r '.contentList[] | .home.title.text')
-		if [ ${timelist[$i]} = '""' ]
+		if [ $isListLive = 1 ]
 		then
-			if [ ${#id} = 2 ]
-			then
-				output=(${output[@]} " $id | $info (Unknown)")
-			else
-				output=(${output[@]} "$id | $info (Unknown)")
-			fi
+			echo -en "Updating live list... ($n/${#idList[@]})\r"
+		elif [ $isListLive = 0 ]
+		then
+			echo -en "Updating banner list... ($n/${#idList[@]})\r"
+		fi
+		info=$(curl -s ${NOW_LINK}/${id}/content | jq -r '.contentList[] | .home.title.text')
+		if [ -z ${airTimeList[$i]} ]
+		then
+			output=(${output[@]} "$id | $info (Unknown)")
 		else
-			if [ ${#id} = 2 ]
-			then
-				output=(${output[@]} " $id | $info (${timelist[$i]//'"'/''})")
-			else
-				output=(${output[@]} "$id | $info (${timelist[$i]//'"'/''})")
-			fi
+			output=(${output[@]} "$id | $info (${airTimeList[$i]//'"'/''})")
 		fi
 		((i++)); ((n++))
 	done
