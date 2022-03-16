@@ -188,12 +188,12 @@ function check_invalid_parms()
 {
 	if is_not_empty "$1"
 	then
-		print_banner
+		print_help
 		err_msg "Invalid Option: $1\n"
 		exit 2
 	elif [ -z ${SHOW_ID} ]
 	then
-		print_banner
+		print_help
 		err_msg "Please enter valid Show ID\n"
 		exit 2
 	fi
@@ -358,16 +358,17 @@ function script_init()
 		show_chat
 	fi
 
-	if [ -n "$VERB" ]
+	if [ -n "$VERB" ] # https://unix.stackexchange.com/a/444949
 	then
 		alert_msg "Verbose Mode"
-		wget_c="wget"
-		youtube_c="youtube-dl"
-		ffmpeg_c="ffmpeg"
+		wget_c=(wget)
+		youtube_c=(youtube-dl)
+		ffmpeg_c=(ffmpeg)
 	else
-		wget_c="wget -q"
-		youtube_c="youtube-dl -q --no-warnings"
-		ffmpeg_c="ffmpeg -loglevel quiet"
+		alert_msg "Non-Verbose Mode"
+		wget_c=(wget -q)
+		youtube_c=(youtube-dl -q --no-warnings)
+		ffmpeg_c=(ffmpeg -loglevel quiet)
 	fi
 
 	if [ -n "$FORCE" ]
@@ -578,9 +579,9 @@ function show_chat()
 # livestatus no longer provide stream URL, and it's replaced by streamURL
 function contentget()
 {
-	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" ${NOW_LINK}/${SHOW_ID}/livestatus
-	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.content.json" ${NOW_LINK}/${SHOW_ID}/content
-	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.streamURL.json" ${NOW_LINK}/${SHOW_ID}
+	"${wget_c[@]}" -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" ${NOW_LINK}/${SHOW_ID}/livestatus
+	"${wget_c[@]}" -O "${OPATH}/content/${SHOW_ID}_${d_date}.content.json" ${NOW_LINK}/${SHOW_ID}/content
+	"${wget_c[@]}" -O "${OPATH}/content/${SHOW_ID}_${d_date}.streamURL.json" ${NOW_LINK}/${SHOW_ID}
 
 	if [ -z $ITG_CHECK ]
 	then
@@ -600,8 +601,8 @@ function contentget()
 			do
 				((CTRETRY++))
 				msg "\n재시도 횟수: $CTRETRY / 최대 재시도 횟수: $MAXRETRY\n"
-				$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" ${NOW_LINK}/${SHOW_ID}/livestatus
-				$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.content.json" ${NOW_LINK}/${SHOW_ID}/content
+				"${wget_c[@]}" -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" ${NOW_LINK}/${SHOW_ID}/livestatus
+				"${wget_c[@]}" -O "${OPATH}/content/${SHOW_ID}_${d_date}.content.json" ${NOW_LINK}/${SHOW_ID}/content
 				ctlength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}.content.json" | awk '{print $1}')
 				lslength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" | awk '{print $1}')
 				msg "content: $ctlength Bytes / livestatus: $lslength Bytes"
@@ -674,7 +675,7 @@ function getstream()
 	if [ $ExitCode = 0 ]
 	then
 		info_msg -t "Valid URL, Proceeding..."
-		$youtube_c --hls-use-mpegts --no-part "${url}" --output "${OPATH}/show/$title/${FILENAME}.ts" & YPID=$!
+		"${youtube_c[@]}" --hls-use-mpegts --no-part "${url}" --output "${OPATH}/show/$title/${FILENAME}.ts" & YPID=$!
 	else
 		err_msg -t "Invalid URL, retrying...\n"
 		contentget
@@ -787,12 +788,12 @@ function convert()
 		if [ "$codec" = 'mp3' ]
 		then
 			msg "\nCodec: MP3, Saving into mp3 file"
-			$ffmpeg_c -i "${OPATH}/show/$title/${FILENAME}.ts" -vn -c:a copy "${OPATH}/show/$title/${FILENAME}.mp3"
+			"${ffmpeg_c[@]}" -i "${OPATH}/show/$title/${FILENAME}.ts" -vn -c:a copy "${OPATH}/show/$title/${FILENAME}.mp3"
 			msg "Convert Complete: ${OPATH}/show/$title/${FILENAME}.mp3"
 		elif [ "$codec" = 'aac' ]
 		then
 			msg "\nCodec: AAC, Saving into m4a file"
-			$ffmpeg_c -i "${OPATH}/show/$title/${FILENAME}.ts" -vn -c:a copy "${OPATH}/show/$title/${FILENAME}.m4a"
+			"${ffmpeg_c[@]}" -i "${OPATH}/show/$title/${FILENAME}.ts" -vn -c:a copy "${OPATH}/show/$title/${FILENAME}.m4a"
 			msg "Convert Complete: ${OPATH}/show/$title/${FILENAME}.m4a"
 		else
 			err_msg "\nERROR: Unidentified Codec ($codec)"
@@ -805,7 +806,7 @@ function convert()
 		fi
 	fi
 
-	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" ${NOW_LINK}/${SHOW_ID}/livestatus
+	"${wget_c[@]}" -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" ${NOW_LINK}/${SHOW_ID}/livestatus
 	total_user=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" | grep -oP 'cumulativeUserCount":\K[^}]+')
 	msg "\n오늘 총 조회수: $total_user"
 
@@ -993,7 +994,7 @@ function onairwait()
 function main()
 {
 	# Live Status
-	$wget_c -O "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.json" ${NOW_LINK}/livelist
+	"${wget_c[@]}" -O "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.json" ${NOW_LINK}/livelist
 	jq '.liveList[]' "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.json" > "${OPATH}/content/${SHOW_ID}_${d_date}_livelist.json"
 	rm "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.json"
 
