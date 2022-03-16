@@ -1128,6 +1128,7 @@ function proceed_download()
 			exit 0 ;;
 		*)
 			err_msg "Please enter Y or N"
+			exit 255 ;;
 	esac
 }
 
