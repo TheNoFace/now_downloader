@@ -310,7 +310,7 @@ function script_init()
 	d_date=$(date +'%y%m%d')
 	package_check
 
-	[ "$GetInfo" = 1 ] && get_info
+	[ -n "$GetInfo" ] && get_info
 
 	if [ -z ${OPATH_I} ]
 	then
@@ -365,7 +365,6 @@ function script_init()
 		youtube_c=(youtube-dl)
 		ffmpeg_c=(ffmpeg)
 	else
-		alert_msg "Non-Verbose Mode"
 		wget_c=(wget -q)
 		youtube_c=(youtube-dl -q --no-warnings)
 		ffmpeg_c=(ffmpeg -loglevel quiet)
@@ -463,7 +462,8 @@ function get_info()
 	fi
 
 	msg "${info}\n"
-	exit 0
+	unset GetInfo
+	proceed_download ${SHOW_ID}
 }
 
 function get_chat()
@@ -1094,8 +1094,41 @@ function get_list()
 		((n++))
 	done
 	echo
+	proceed_download
+}
 
-	exit 0
+function proceed_download()
+{
+	SHOW_ID=$1
+	IFS=$oriIFS
+	echo -n "Do you want to start download now? (Y/N): "
+	read proceed
+	case "${proceed}" in
+		Y|y)
+			if [[ -z ${SHOW_ID} ]]
+			then
+				echo -n "Please enter the show ID to download (NOT LIST #!): "
+				read SHOW_ID
+			else
+				idList=("${SHOW_ID}")
+			fi
+
+			for id in "${idList[@]}"
+			do
+				if [[ ${id} -eq ${SHOW_ID} ]]
+				then
+					get_parms -i ${SHOW_ID}
+					script_init
+					main
+				fi
+			done
+			err_msg "You have entered wrong ID: ${SHOW_ID}"
+			exit 255 ;;
+		N|n)
+			exit 0 ;;
+		*)
+			err_msg "Please enter Y or N"
+	esac
 }
 
 ### SCRIPT START
