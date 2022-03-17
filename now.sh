@@ -42,7 +42,7 @@ BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
 oriIFS=$IFS
 
-P_LIST=(bc jq curl wget youtube-dl ffmpeg)
+P_LIST=(bc jq curl wget ffmpeg)
 dirList=(content log show chat)
 
 NOW_LINK='https://apis.naver.com/now_web/nowapi-xhmac/nnow/v2/stream'
@@ -232,7 +232,7 @@ Options:
   -t  | --time-check [second] Check stream status if it has ended abnormally by checking file size
                               Default is set to $CHKINTSET seconds
   -u  | --user                Display current/total users of the show
-  -v  | --verbose             Print wget/youtube-dl/ffmpeg messages
+  -v  | --verbose             Print wget/ffmpeg messages
 
         --help                Show this help screen
         --version             Show program name and version
@@ -362,11 +362,9 @@ function script_init()
 	then
 		alert_msg "Verbose Mode"
 		wget_c=(wget)
-		youtube_c=(youtube-dl)
 		ffmpeg_c=(ffmpeg)
 	else
 		wget_c=(wget -q)
-		youtube_c=(youtube-dl -q --no-warnings)
 		ffmpeg_c=(ffmpeg -loglevel quiet)
 	fi
 
@@ -675,7 +673,7 @@ function getstream()
 	if [ $ExitCode = 0 ]
 	then
 		info_msg -t "Valid URL, Proceeding..."
-		"${youtube_c[@]}" --hls-use-mpegts --no-part "${url}" --output "${OPATH}/show/$title/${FILENAME}.ts" & YPID=$!
+		"${ffmpeg_c[@]}" -y -headers 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/72.0.3625.2 Safari/537.36? Accept-Charset: ISO-8859-1,utf-8;q=0.7,*;q=0.7? Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8? Accept-Encoding: gzip, deflate? Accept-Language: en-us,en;q=0.5?' -i "${url}" -c copy -f mpegts file:"${OPATH}/show/$title/${FILENAME}.ts" & FPID=$!
 	else
 		err_msg -t "Invalid URL, retrying...\n"
 		contentget
@@ -685,16 +683,19 @@ function getstream()
 	fi
 	#-ERROR-CHECK------------------------------------------------------
 
-	msg -t "Waiting for ffmpeg to start..." && sleep 10
-	FPID=$(ps --ppid $YPID | awk 'FNR == 2 {print $1}')
-	PIDS=($YPID $FPID)
+	while [[ $(ps -p $FPID 2>/dev/null | awk 'FNR == 2 {print $4}') != 'ffmpeg' ]]
+	do
+		echo -en "[$(date +'%x %T')] Waiting for ffmpeg to start...\r"
+		sleep 1
+	done
 	msg -t "Download Started, checking stream status every ${YLW}$CHKINT${NC} seconds\n"
+	sleep $CHKINT
 
 	while :
 	do
-		INITSIZE=$(wc -c "${OPATH}/show/$title/${FILENAME}.ts" | cut -d ' ' -f 1)
+		INITSIZE=$(wc -c "${OPATH}/show/$title/${FILENAME}.ts" 2>/dev/null | cut -d ' ' -f 1)
 		sleep $CHKINT
-		POSTSIZE=$(wc -c "${OPATH}/show/$title/${FILENAME}.ts" | cut -d ' ' -f 1)
+		POSTSIZE=$(wc -c "${OPATH}/show/$title/${FILENAME}.ts" 2>/dev/null | cut -d ' ' -f 1)
 		if [ -t 1 ]
 		then
 			tput el
@@ -713,16 +714,16 @@ function getstream()
 			then
 				tput cuu 2
 			fi
-			if [ "$INITSIZE" = "$POSTSIZE" ]
+			if [[ $INITSIZE -eq $POSTSIZE ]]
 			then
 				if [ -t 1 ]
 				then
 					tput cud 2
 				fi
-				if [ "$(ps -p $YPID | awk 'FNR == 2 {print $4}')" = 'youtube-dl' ]
+				if [ "$(ps -p $FPID 2>/dev/null | awk 'FNR == 2 {print $4}')" = 'ffmpeg' ]
 				then
 					alert_msg -t "Download stalled, but show is still ONAIR!\n"
-				elif [ "$(ps -p $YPID | awk 'FNR == 2 {print $4}')" != 'youtube-dl' ]
+				elif [ "$(ps -p $FPID 2>/dev/null | awk 'FNR == 2 {print $4}')" != 'ffmpeg' ]
 				then
 					if [ "$MAXRETRY" = "0" ]
 					then
@@ -740,7 +741,7 @@ function getstream()
 					then
 						((RETRY++))
 						err_msg -t "$CHKINT초 동안 다운로드 중단됨, 다시 시도합니다\n"
-						kill ${PIDS[@]}
+						kill $FPID 2>/dev/null
 						content_backup
 						contentget
 						exrefresh

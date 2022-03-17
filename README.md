@@ -8,7 +8,6 @@ If you want to run this script using crontab, then make sure you can run below c
 - curl
 - bc
 - [jq](https://stedolan.github.io/jq/)
-- [youtube-dl](https://youtube-dl.org/)
 - [ffmpeg](https://ffmpeg.org/)
 
 ### How to use
@@ -37,7 +36,7 @@ Options:
   -t  | --time-check [second] Check stream status if it has ended abnormally by checking file size
                               Default is set to 30 seconds
   -u  | --user                Display current/total users of the show
-  -v  | --verbose             Print wget/youtube-dl/ffmpeg messages
+  -v  | --verbose             Print wget/ffmpeg messages
 
         --help                Show this help screen
         --version             Show program name and version
