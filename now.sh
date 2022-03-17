@@ -817,7 +817,7 @@ function convert()
 
 function renamer()
 {
-	str=$1
+	str="$1"
 	str=${str//'"'/''}
 	str=${str//'\r\n'/' '}
 	str=${str//'\'/''}
