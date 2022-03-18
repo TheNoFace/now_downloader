@@ -1062,7 +1062,7 @@ function get_list()
 		fi
 		content=$(curl -s ${NOW_LINK}/${id}/content)
 		title=$(echo "${content}" | jq -r .contentList[].home.title.text)
-		vcheck=$(echo "${content}" | jq -r .contentList[].video)
+		vcheck=$(echo "${content}" | jq -r '(.contentList[].video|tostring) | sub("false"; "Audio") | sub("true"; "Video")')
 		if [ -z ${airTimeList[$i]} ]
 		then
 			output=("${output[@]}" "$id | $vcheck | $title (Unknown)")
