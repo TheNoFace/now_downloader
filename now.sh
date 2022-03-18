@@ -425,8 +425,8 @@ function script_init()
 	then
 		contentget
 		exrefresh
-		cur_user=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" | grep -oP 'concurrentUserCount":\K[^,]+')
-		total_user=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" | grep -oP 'cumulativeUserCount":\K[^}]+')
+		cur_user=$(echo "${livestatus}" | jq -r .status.indicator.concurrentUserCount)
+		total_user=$(echo "${livestatus}" | jq -r .status.indicator.cumulativeUserCount)
 
 		msg "\n$startdate $title by ${showhost}\n$subject"
 		if [ "$STATUS" = "ONAIR" ]
@@ -454,9 +454,9 @@ function get_info()
 	guest=$(echo "$content" | jq -r '.contentList[] | (.description.clova.guest | join(","))')
 	if [ -z "$guest" ]
 	then
-		info=$(echo "$content" | jq -r '.contentList[] | .home.title.text + " by " + (.description.clova.host | join(", ")) + " (ID: " + .contentId + " / Video: " + (.video|tostring)+ ")" + "\n\n" + .title.text + "\n\n" + .description.text | sub("false"; "X") | sub("true"; "O")')
+		info=$(echo "$content" | jq -r '.contentList[] | .home.title.text + " by " + (.description.clova.host | join(", ")) + "\n\n" + .title.text + "\n\n" + .description.text')
 	else
-		info=$(echo "$content" | jq -r '.contentList[] | .home.title.text + " by " + (.description.clova.host | join(", ")) + " (ID: " + .contentId + " / Video: " + (.video|tostring)+ ")" + "\nGuest: " + (.description.clova.guest|join(",")) + "\n\n" + .title.text + "\n\n" + .description.text | sub("false"; "X") | sub("true"; "O")')
+		info=$(echo "$content" | jq -r '.contentList[] | .home.title.text + " by " + (.description.clova.host | join(", ")) + "\nGuest: " + (.description.clova.guest|join(",")) + "\n\n" + .title.text + "\n\n" + .description.text')
 	fi
 
 	msg "${info}\n"
@@ -573,20 +573,18 @@ function show_chat()
 	fi
 }
 
-# content: general information of show
-# livestatus no longer provide stream URL, and it's replaced by streamURL
 function contentget()
 {
-	"${wget_c[@]}" -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" ${NOW_LINK}/${SHOW_ID}/livestatus
-	"${wget_c[@]}" -O "${OPATH}/content/${SHOW_ID}_${d_date}.content.json" ${NOW_LINK}/${SHOW_ID}/content
-	"${wget_c[@]}" -O "${OPATH}/content/${SHOW_ID}_${d_date}.streamURL.json" ${NOW_LINK}/${SHOW_ID}
+	"${wget_c[@]}" -O "${OPATH}/content/${SHOW_ID}_${d_date}_livestatus.json" ${NOW_LINK}/${SHOW_ID}/livestatus
+	"${wget_c[@]}" -O "${OPATH}/content/${SHOW_ID}_${d_date}_content.json" ${NOW_LINK}/${SHOW_ID}/content
+	"${wget_c[@]}" -O "${OPATH}/content/${SHOW_ID}_${d_date}.json" ${NOW_LINK}/${SHOW_ID}
 
 	if [ -z $ITG_CHECK ]
 	then
-		ctlength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}.content.json" | awk '{print $1}')
-		lslength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" | awk '{print $1}')
+		ctlength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}.json" | awk '{print $1}')
+		lslength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}_livestatus.json" | awk '{print $1}')
 		msg "content: $ctlength Bytes / livestatus: $lslength Bytes"
-		if [ "$ctlength" -lt 2500 ] && [ "$lslength" -lt 1000 ]
+		if [ "$ctlength" -lt 1500 ] && [ "$lslength" -lt 1000 ]
 		then
 			if [ "$MAXRETRY" = "0" ]
 			then
@@ -599,12 +597,12 @@ function contentget()
 			do
 				((CTRETRY++))
 				msg "\n재시도 횟수: $CTRETRY / 최대 재시도 횟수: $MAXRETRY\n"
-				"${wget_c[@]}" -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" ${NOW_LINK}/${SHOW_ID}/livestatus
-				"${wget_c[@]}" -O "${OPATH}/content/${SHOW_ID}_${d_date}.content.json" ${NOW_LINK}/${SHOW_ID}/content
-				ctlength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}.content.json" | awk '{print $1}')
-				lslength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" | awk '{print $1}')
+				"${wget_c[@]}" -O "${OPATH}/content/${SHOW_ID}_${d_date}_livestatus.json" ${NOW_LINK}/${SHOW_ID}/livestatus
+				"${wget_c[@]}" -O "${OPATH}/content/${SHOW_ID}_${d_date}.json" ${NOW_LINK}/${SHOW_ID}
+				ctlength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}.json" | awk '{print $1}')
+				lslength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}_livestatus.json" | awk '{print $1}')
 				msg "content: $ctlength Bytes / livestatus: $lslength Bytes"
-				if [ "$ctlength" -lt 2500 ] && [ "$lslength" -lt 1000 ]
+				if [ "$ctlength" -lt 1500 ] && [ "$lslength" -lt 1000 ]
 				then
 					if [ "$CTRETRY" -lt "$MAXRETRY" ]
 					then
@@ -619,7 +617,7 @@ function contentget()
 						content_backup
 						exit 1
 					fi
-				elif [ "$ctlength" -ge 2500 ] && [ "$lslength" -ge 1000 ]
+				elif [ "$ctlength" -ge 1500 ] && [ "$lslength" -ge 1000 ]
 				then
 					info_msg "정상 content/livestatus 파일\n"
 					break
@@ -629,7 +627,7 @@ function contentget()
 					exit 1
 				fi
 			done
-		elif [ "$ctlength" -ge 2500 ] && [ "$lslength" -ge 1000 ]
+		elif [ "$ctlength" -ge 1500 ] && [ "$lslength" -ge 1000 ]
 		then
 			info_msg "정상 content/livestatus 파일\n"
 		else
@@ -645,13 +643,9 @@ function contentget()
 
 function content_backup()
 {
-	mv "${OPATH}/content/${SHOW_ID}_${d_date}.content.json" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_$CTIME.content.json"
-	mv "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_$CTIME.livestatus.json"
-	mv "${OPATH}/content/${SHOW_ID}_${d_date}.streamURL.json" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_$CTIME.streamURL.json"
-	if [ -e "${OPATH}/content/${SHOW_ID}_${d_date}_livelist.json" ]
-	then
-		mv "${OPATH}/content/${SHOW_ID}_${d_date}_livelist.json" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_${CTIME}_livelist.json"
-	fi
+	mv "${OPATH}/content/${SHOW_ID}_${d_date}_content.json" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_${CTIME}_content.json"
+	mv "${OPATH}/content/${SHOW_ID}_${d_date}_livestatus.json" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_${CTIME}_livestatus.json"
+	mv "${OPATH}/content/${SHOW_ID}_${d_date}.json" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_${CTIME}.json"
 }
 
 function getstream()
@@ -660,7 +654,7 @@ function getstream()
 
 	if [ $RETRY = 0 ]
 	then
-		INFO=$(jq -r '.contentList[].description.text' "${OPATH}/content/${SHOW_ID}_${d_date}.content.json")
+		INFO=$(jq -r .episode_description "${OPATH}/content/${SHOW_ID}_${d_date}.json")
 		echo -e "Host: ${showhost}\nEP: $ep\n\n$subject\n\n$INFO" > "${OPATH}/show/$title/${d_date}_${showhost}_Info.txt"
 	fi
 
@@ -807,8 +801,7 @@ function convert()
 		fi
 	fi
 
-	"${wget_c[@]}" -O "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" ${NOW_LINK}/${SHOW_ID}/livestatus
-	total_user=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" | grep -oP 'cumulativeUserCount":\K[^}]+')
+	total_user=$(curl -s ${NOW_LINK}/${SHOW_ID}/livestatus | jq -r .status.indicator.cumulativeUserCount)
 	msg "\n오늘 총 조회수: $total_user"
 
 	info_msg "\nJob Finished, Code: $SREASON\n"
@@ -827,28 +820,21 @@ function renamer()
 function exrefresh()
 {
 	unset url title startdate starttime
-	local content livestatus
-	content=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.content.json")
-	livestatus=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json")
+	content=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.json")
+	livestatus=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}_livestatus.json")
 
-	showhost=$(echo "${content}" | jq -r '.contentList[] | (.description.clova.host | join(", "))')
-	title=$(echo "${content}" | grep -oP 'home":{"title":{"text":"\K[^"]+')
-	vcheck=$(echo "${content}" | grep -oP 'video":\K[^,]+')
-	# if [ "$vcheck" = 'true' ]
-	# then
-	# 	url=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" | grep -oP 'videoStreamUrl":"\K[^"]+')
-	# else
-	# 	url=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.livestatus.json" | grep -oP 'liveStreamUrl":"\K[^"]+')
-	# fi
-	url=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.streamURL.json" | jq -r .hls_url)
-	ORI_DATE=$(echo "${livestatus}" | grep -oP 'startDatetime":"\K[^"]+' | xargs -i date -d {} +%s) # Seconds since 1970-01-01 00:00:00 UTC
+	showhost=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}_content.json" | jq -r '.contentList[] | (.description.clova.host | join(", "))')
+	vcheck=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}_content.json" | jq -r .contentList[].video)
+	title=$(echo "${content}" | jq -r .name)
+	url=$(echo "${content}" | jq -r .hls_url)
+	ORI_DATE=$(echo "${content}" | jq .start_time | xargs -i date -d {} +%s) # Seconds since 1970-01-01 00:00:00 UTC
 	startdate=$(date -d @$ORI_DATE +'%y%m%d')
 	starttime=$(date -d @$ORI_DATE +'%H%M%S')
-	subject=$(echo "${content}" | jq '.contentList[].title.text')
-	ep=$(echo "${content}" | grep -oP '"count":"\K[^회"]+')
-	STATUS=$(echo "${livestatus}" | grep -oP ${SHOW_ID}'","status":"\K[^"]+') # READY | END | ONAIR
+	subject=$(echo "${content}" | jq .episode_name)
+	ep=$(echo "${content}" | jq -r .no)
+	STATUS=$(echo "${livestatus}" | jq -r .status.status) # READY | END | ONAIR
 
-	renamer "$subject" subject
+	renamer "${subject}" subject
 
 	if [ -z "$G_USR" ]
 	then
@@ -901,12 +887,13 @@ function timeupdate()
 	fi
 	FILENAME=${FILENAME//'w/'/'with'}
 	FILENAME=${FILENAME//'%'/'%%'}
+	FILENAME=${FILENAME//'\'/''}
 	alert_msg "Time variables refreshed"
 }
 
 function get_status()
 {
-	STATUS=$(curl -s ${NOW_LINK}/${SHOW_ID}/livestatus | jq -r .[].status)
+	STATUS=$(curl -s ${NOW_LINK}/${SHOW_ID}/livestatus | jq -r .status.status)
 }
 
 function counter()
@@ -940,10 +927,13 @@ function onairwait()
 	do
 		if [ "$TIMECHECK" -le -15 ]
 		then
-			line=$(expr $(grep -n '"contentId": "'${SHOW_ID}'"' "${OPATH}/content/${SHOW_ID}_${d_date}_livelist.json" | cut -d : -f 1) + 3)
-			b_day=$(sed -n ${line}p "${OPATH}/content/${SHOW_ID}_${d_date}_livelist.json" | cut -d '"' -f 4)
+			bannerList=$(curl -s ${NOW_LINK}/bannertable)
+			line=$(echo "${bannerList}" | jq .contentList[].banners[].contentId \
+			     | grep -n ${SHOW_ID} | cut -d : -f 1)
+			b_day=$(echo "${bannerList}" | jq -r .contentList[].banners[].time  \
+			     | awk -v var=$line 'FNR == var')
 			err_msg "\nERROR: 시작시간과 15분 이상 차이 발생\n금일 방송 유무를 확인해주세요"
-			err_msg "\n쇼 이름: $title\n방송 시간: $b_day (KST)\n"
+			msg "\n쇼 이름: $title\n방송 시간: $b_day (KST)\n"
 			content_backup
 			exit 1
 		fi
@@ -994,11 +984,6 @@ function onairwait()
 
 function main()
 {
-	# Live Status
-	"${wget_c[@]}" -O "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.json" ${NOW_LINK}/livelist
-	jq '.liveList[]' "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.json" > "${OPATH}/content/${SHOW_ID}_${d_date}_livelist.json"
-	rm "${OPATH}/content/${SHOW_ID}_${d_date}_LiveList.json"
-
 	contentget
 	exrefresh
 	timeupdate
@@ -1075,12 +1060,14 @@ function get_list()
 		then
 			echo -en "Updating banner list... ($n/${#idList[@]})\r"
 		fi
-		info=$(curl -s ${NOW_LINK}/${id}/content | jq -r '.contentList[] | .home.title.text')
+		content=$(curl -s ${NOW_LINK}/${id}/content)
+		title=$(echo "${content}" | jq -r .contentList[].home.title.text)
+		vcheck=$(echo "${content}" | jq -r .contentList[].video)
 		if [ -z ${airTimeList[$i]} ]
 		then
-			output=(${output[@]} "$id | $info (Unknown)")
+			output=("${output[@]}" "$id | $vcheck | $title (Unknown)")
 		else
-			output=(${output[@]} "$id | $info (${airTimeList[$i]//'"'/''})")
+			output=("${output[@]}" "$id | $vcheck | $title (${airTimeList[$i]//'"'/''})")
 		fi
 		((i++)); ((n++))
 	done
