@@ -8,7 +8,6 @@ parser = argparse.ArgumentParser(description='Simple NOW Downloader in Python')
 parser.add_argument('show_id', type=int, help='Show ID to download')
 args = parser.parse_args()
 
-ffmpeg_header = 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/72.0.3625.2 Safari/537.36? Accept-Charset: ISO-8859-1,utf-8;q=0.7,*;q=0.7? Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8? Accept-Encoding: gzip, deflate? Accept-Language: en-us,en;q=0.5?'
 now_link = 'https://apis.naver.com/now_web/nowapi-xhmac/nnow/v2/stream/'
 current_time = time.strftime('%H%M%S')
 current_date = time.strftime('%Y%m%d')
@@ -34,7 +33,7 @@ print('Downloadig %s (E%s)\nTitle: %s\nFilename: %s\n%s'
 
 (
     ffmpeg
-    .input(hls_url, headers=ffmpeg_header)
+    .input(hls_url)
     .output(filename+'.ts', c='copy', f='mpegts', map='p:0')
     .overwrite_output()
     .run(capture_stderr=True)
