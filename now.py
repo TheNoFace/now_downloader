@@ -8,6 +8,7 @@ import time
 import json
 import ffmpeg
 import sys
+import os.path
 
 version = '22.03.21'
 help_msg = 'Simple NOW Downloader in Python (' + version + ')'
@@ -17,9 +18,18 @@ parser = argparse.ArgumentParser(allow_abbrev=False,
 parser.add_argument('show_id', type=int, help='Show ID to download')
 parser.add_argument('-i', '--info', action='store_true',
                     help='Print detailed show information')
+parser.add_argument('-o', '--output_dir', type=os.path.abspath, nargs='?',
+                    help='Set download destination')
 args = parser.parse_args()
 
 print_info = args.info
+if args.output_dir:
+    path = args.output_dir
+    print('Overrided download dir: %s' % path)
+else:
+    path = os.getcwd()
+    print('Download dir: %s' % path)
+
 now_link = 'https://apis.naver.com/now_web/nowapi-xhmac/nnow/v2/stream/'
 current_time = time.strftime('%H%M%S')
 current_date = time.strftime('%Y%m%d')
@@ -33,7 +43,9 @@ livestatus_link = show_link + '/livestatus'
 
 
 def get_stream(url, name):
+    name = str(path) + '\\' + name
     print('Downloading... (%s.ts)' % name)
+
     (
         ffmpeg
         .input(url)
