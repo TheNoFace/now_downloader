@@ -10,37 +10,6 @@ import ffmpeg
 import sys
 import os.path
 
-version = '22.03.21'
-help_msg = 'Simple NOW Downloader in Python (' + version + ')'
-
-parser = argparse.ArgumentParser(allow_abbrev=False,
-                                 description=help_msg)
-parser.add_argument('show_id', type=int, help='Show ID to download')
-parser.add_argument('-i', '--info', action='store_true',
-                    help='Print detailed show information')
-parser.add_argument('-o', '--output_dir', type=os.path.abspath, nargs='?',
-                    help='Set download destination')
-args = parser.parse_args()
-
-print_info = args.info
-if args.output_dir:
-    path = args.output_dir
-    print('Overrided download dir: %s' % path)
-else:
-    path = os.getcwd()
-    print('Download dir: %s' % path)
-
-now_link = 'https://apis.naver.com/now_web/nowapi-xhmac/nnow/v2/stream/'
-current_time = time.strftime('%H%M%S')
-current_date = time.strftime('%Y%m%d')
-
-show_id = args.show_id
-show_link = now_link + str(show_id)
-bannertable_link = now_link + '/bannertable'
-livelist_link = now_link + '/livelist'
-content_link = show_link + '/content'
-livestatus_link = show_link + '/livestatus'
-
 
 def get_stream(url, name):
     name = str(path) + '\\' + name
@@ -91,6 +60,44 @@ def ask_to_proceed():
     else:
         pass
 
+
+version = '22.03.21'
+help_msg = 'Simple NOW Downloader in Python (' + version + ')'
+
+parser = argparse.ArgumentParser(allow_abbrev=False,
+                                 description=help_msg)
+parser.add_argument('show_id', type=int, help='Show ID to download')
+parser.add_argument('-i', '--info', action='store_true',
+                    help='Print detailed show information')
+parser.add_argument('-o', '--output_dir', type=os.path.abspath, nargs='?',
+                    help='Set download destination')
+parser.add_argument('-l', '--list', action='store_true',
+                    help='Set download destination')
+parser.add_argument('--list_live', action='store_true',
+                    help='Set download destination')
+args = parser.parse_args()
+
+print_info = args.info
+print_list = args.list
+print_live = args.list_live
+
+now_link = 'https://apis.naver.com/now_web/nowapi-xhmac/nnow/v2/stream/'
+current_time = time.strftime('%H%M%S')
+current_date = time.strftime('%Y%m%d')
+
+show_id = args.show_id
+show_link = now_link + str(show_id)
+bannertable_link = now_link + 'bannertable'
+livelist_link = now_link + 'livelist'
+content_link = show_link + 'content'
+livestatus_link = show_link + 'livestatus'
+
+if args.output_dir:
+    path = args.output_dir
+    print('Overrided download dir: %s' % path)
+else:
+    path = os.getcwd()
+    print('Download dir: %s' % path)
 
 show_json_response = check_url(show_link, show_id, exit=True)
 if show_json_response:
