@@ -66,8 +66,28 @@ def ask_to_proceed():
         pass
 
 
+def get_list(live=False):
+    if live is True:
+        livelist = check_url(livelist_link, '')
+        livelist_json = json.loads(livelist.read().decode('utf-8'))
+        contentList, contentId = livelist_json.get('liveList'), []
+        for i in range(len(contentList)):
+            contentId.append(contentList[i].get('contentId'))
+        sys.exit(contentId)
+    else:
+        bannertable = check_url(bannertable_link, '')
+        bannertable_json = json.loads(bannertable.read().decode('utf-8'))
+        contentList, contentId = bannertable_json.get('contentList'), []
+        for i in range(len(contentList)):
+            banners = contentList[i].get('banners')
+            for n in range(len(banners)):
+                contentId.append(banners[n].get('contentId'))
+        sys.exit(contentId)
+
+
 help_msg = 'Simple NOW Downloader in Python (' + version + ')'
 get_msg = 'Print show info or get stream'
+list_msg = 'List available shows'
 parser = argparse.ArgumentParser(allow_abbrev=False, description=help_msg)
 subparser = parser.add_subparsers()
 parser_id = subparser.add_parser('get', description=get_msg, help=get_msg)
@@ -76,7 +96,17 @@ parser_id.add_argument('-i', '--info', action='store_true',
                        help='Print detailed show information')
 parser_id.add_argument('-o', '--output-dir', type=os.path.abspath,
                        nargs='?', help='Set download dir', dest='output')
+parser_list = subparser.add_parser('list', description=list_msg, help=list_msg)
+parser_list.set_defaults(func=get_list)
+parser_list.add_argument('--live', action='store_true',
+                         dest='live', help='List currently shows on air')
 args = parser.parse_args()
+
+if hasattr(args, 'func'):
+    if hasattr(args, 'live'):
+        get_list(args.live)
+    else:
+        get_list()
 
 if hasattr(args, 'show_id'):
     if args.output:
@@ -114,7 +144,7 @@ if show_json_response:
     filename = current_date + '.NAVER NOW.' + show_name + \
         '.E' + show_ep + '.' + show_title + '_' + current_time
 
-    print('\n%s (E%s)\nTitle: %s\n%s\n\n%s\n'
+    print('%s (E%s)\nTitle: %s\n%s\n\n%s\n'
           % (show_name, show_ep, show_title, hls_url, show_info))
 
     try:
