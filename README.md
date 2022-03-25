@@ -1,7 +1,7 @@
 # Now Downloader
 Simple python program to download streaming from [NAVER NOW](https://now.naver.com)   
 Python version is still in development, and only few options are available comparing to shell script version.
-Please check out shell script version: [Bash branch](https://github.com/TheNoFace/now_downloader/tree/master)
+Please check out shell script version: [Bash Version](https://github.com/TheNoFace/now_downloader/tree/master)
 
 ### Required Python Module/Executable
 - [ffmpeg](https://ffmpeg.org/)
@@ -9,16 +9,15 @@ Please check out shell script version: [Bash branch](https://github.com/TheNoFac
 
 ### How to use
 ```
-usage: now.py [-h] [-i] [-o [OUTPUT_DIR]] show_id
+usage: now.py [-h] {get,list} ...
 
-Simple NOW Downloader in Python (22.03.21)
+Simple NOW Downloader in Python (22.03.25)
 
 positional arguments:
-  show_id               Show ID to download
+  {get,list}
+    get       Print show info or get stream
+    list      List available shows
 
 optional arguments:
-  -h, --help            show this help message and exit
-  -i, --info            Print detailed show information
-  -o [OUTPUT_DIR], --output_dir [OUTPUT_DIR]
-                        Set download destination
+  -h, --help  show this help message and exit
 ```
