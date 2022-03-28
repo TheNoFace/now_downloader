@@ -16,17 +16,20 @@ bannertable_link = now_link + 'bannertable'
 livelist_link = now_link + 'livelist'
 
 
-def get_stream(url, name):
+def get_stream(url, name, test=False):
     name = str(path) + '\\' + name
-    print('Downloading... (%s.ts)' % name)
+    print('Downloading... Press Q or Ctrl+Z to quit.\nOutput: %s.ts' % name)
 
-    (
-        ffmpeg
-        .input(url)
-        .output(name+'.ts', c='copy', f='mpegts', map='p:0')
-        .overwrite_output()
-        .run(capture_stderr=True)
-    )
+    if test is False:
+        (
+            ffmpeg
+            .input(url)
+            .output(name+'.ts', c='copy', f='mpegts', map='p:0')
+            .overwrite_output()
+            .run(capture_stderr=True)
+        )
+    else:
+        print('\n** In Test Run **\nInput URL: %s' % url)
 
 
 def check_url(url, id, no_msg=False, msg=False, exit=False):
@@ -96,6 +99,8 @@ parser_id.add_argument('-i', '--info', action='store_true',
                        help='Print detailed show information')
 parser_id.add_argument('-o', '--output-dir', type=os.path.abspath,
                        nargs='?', help='Set download dir', dest='output')
+parser_id.add_argument('--test', action='store_true',
+                       help='Print test information, but do not download')
 parser_list = subparser.add_parser('list', description=list_msg, help=list_msg)
 parser_list.set_defaults(func=get_list)
 parser_list.add_argument('--live', action='store_true',
@@ -118,6 +123,11 @@ if hasattr(args, 'show_id'):
 
     if args.info:
         print_info = args.info
+
+    if args.test:
+        test_run = args.test
+    else:
+        test_run = False
 
     show_id = args.show_id
 
@@ -154,4 +164,4 @@ if show_json_response:
         pass
 
     check_url(hls_url, show_id, msg='m3u8 url', exit=True)
-    get_stream(hls_url, filename)
+    get_stream(hls_url, filename, test=test_run)
