@@ -112,8 +112,7 @@ if hasattr(args, 'func'):
         get_list(args.live)
     else:
         get_list()
-
-if hasattr(args, 'show_id'):
+elif hasattr(args, 'show_id'):
     if args.output:
         path = args.output
         print('Overrided download dir: %s' % path)
@@ -130,6 +129,8 @@ if hasattr(args, 'show_id'):
         test_run = False
 
     show_id = args.show_id
+else:
+    sys.exit('ERROR: You have to supply get or list option')
 
 current_time = time.strftime('%H%M%S')
 current_date = time.strftime('%Y%m%d')
