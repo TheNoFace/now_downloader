@@ -88,6 +88,42 @@ def get_list(live=False):
         sys.exit(contentId)
 
 
+def main(show_id=None, test_run=False, path=None):
+    try:
+        if bool(show_id):
+            show_link = now_link + str(show_id)
+    except NameError:
+        show_link = now_link
+
+    content_link = show_link + 'content'
+    livestatus_link = show_link + 'livestatus'
+
+    show_json_response = check_url(show_link, show_id, exit=True)
+    if show_json_response:
+        current_time = time.strftime('%H%M%S')
+        current_date = time.strftime('%Y%m%d')
+        show_json = json.loads(show_json_response.read().decode('utf-8'))
+        hls_url = show_json.get('hls_url')
+        show_name = show_json.get('name')
+        show_ep = str(show_json.get('no'))
+        show_title = show_json.get('episode_name').replace('\r\n', ' ')
+        show_info = show_json.get('episode_description')
+        filename = current_date + '.NAVER NOW.' + show_name + \
+            '.E' + show_ep + '.' + show_title + '_' + current_time
+
+        print('%s (E%s)\nTitle: %s\n%s\n\n%s\n'
+              % (show_name, show_ep, show_title, hls_url, show_info))
+
+        try:
+            if bool(print_info):
+                ask_to_proceed()
+        except NameError:
+            pass
+
+        check_url(hls_url, show_id, msg='m3u8 url', exit=True)
+        get_stream(hls_url, filename, test=test_run)
+
+
 help_msg = 'Simple NOW Downloader in Python (' + version + ')'
 get_msg = 'Print show info or get stream'
 list_msg = 'List available shows'
@@ -132,37 +168,4 @@ elif hasattr(args, 'show_id'):
 else:
     sys.exit('ERROR: You have to supply get or list option')
 
-current_time = time.strftime('%H%M%S')
-current_date = time.strftime('%Y%m%d')
-
-try:
-    if bool(show_id):
-        show_link = now_link + str(show_id)
-except NameError:
-    show_link = now_link
-
-content_link = show_link + 'content'
-livestatus_link = show_link + 'livestatus'
-
-show_json_response = check_url(show_link, show_id, exit=True)
-if show_json_response:
-    show_json = json.loads(show_json_response.read().decode('utf-8'))
-    hls_url = show_json.get('hls_url')
-    show_name = show_json.get('name')
-    show_ep = str(show_json.get('no'))
-    show_title = show_json.get('episode_name').replace('\r\n', ' ')
-    show_info = show_json.get('episode_description')
-    filename = current_date + '.NAVER NOW.' + show_name + \
-        '.E' + show_ep + '.' + show_title + '_' + current_time
-
-    print('%s (E%s)\nTitle: %s\n%s\n\n%s\n'
-          % (show_name, show_ep, show_title, hls_url, show_info))
-
-    try:
-        if bool(print_info):
-            ask_to_proceed()
-    except NameError:
-        pass
-
-    check_url(hls_url, show_id, msg='m3u8 url', exit=True)
-    get_stream(hls_url, filename, test=test_run)
+main(show_id=show_id, path=path, test_run=test_run)
