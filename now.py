@@ -16,7 +16,7 @@ bannertable_link = now_link + 'bannertable'
 livelist_link = now_link + 'livelist'
 
 
-def get_stream(url, name, test=False):
+def get_stream(url, name, path, test=False):
     name = str(path) + '\\' + name
     print('Downloading... Press Q or Ctrl+Z to quit.\nOutput: %s.ts' % name)
 
@@ -29,7 +29,7 @@ def get_stream(url, name, test=False):
             .run(capture_stderr=True)
         )
     else:
-        print('\n** In Test Run **\nInput URL: %s' % url)
+        sys.exit('\n** In Test Run **\nInput URL: %s' % url)
 
 
 def check_url(url, id, no_msg=False, msg=False, exit=False):
@@ -115,7 +115,7 @@ def get_list(live=False):
             print('Download dir: %s' % path)
 
         print()
-        main(show_id=id, path=path)
+        main(show_id=id, path=path, test_run=False)
     else:
         sys.exit('ERROR: Show %d not found' % id)
 
@@ -153,7 +153,7 @@ def main(show_id=None, test_run=False, path=None):
             pass
 
         check_url(hls_url, show_id, msg='m3u8 url', exit=True)
-        get_stream(hls_url, filename, test=test_run)
+        get_stream(hls_url, filename, path, test=test_run)
 
 
 help_msg = 'Simple NOW Downloader in Python (' + version + ')'
