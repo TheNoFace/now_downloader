@@ -60,11 +60,14 @@ def check_url(url, id, no_msg=False, msg=False, exit=False):
         return response
 
 
-def ask_to_proceed():
-    choice = input('Proceed to download? (Y/N): ')
+def ask_to_proceed(msg, exit=False):
+    choice = input(msg)
     y_list = ('y', 'Y', 'yes', 'Yes', 'YES')
     if choice not in y_list:
-        sys.exit(0)
+        if exit:
+            sys.exit(0)
+        else:
+            return False
     else:
         pass
 
@@ -116,7 +119,7 @@ def main(show_id=None, test_run=False, path=None):
 
         try:
             if bool(print_info):
-                ask_to_proceed()
+                ask_to_proceed('Proceed to download? (Y/N): ', exit=True)
         except NameError:
             pass
 
