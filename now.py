@@ -129,15 +129,17 @@ get_msg = 'Print show info or get stream'
 list_msg = 'List available shows'
 parser = argparse.ArgumentParser(allow_abbrev=False, description=help_msg)
 subparser = parser.add_subparsers()
-parser_id = subparser.add_parser('get', description=get_msg, help=get_msg)
-parser_id.add_argument('show_id', type=int, help='Show ID to download')
-parser_id.add_argument('-i', '--info', action='store_true',
-                       help='Print detailed show information')
-parser_id.add_argument('-o', '--output-dir', type=os.path.abspath,
-                       nargs='?', help='Set download dir', dest='output')
-parser_id.add_argument('--test', action='store_true',
-                       help='Print test information, but do not download')
-parser_list = subparser.add_parser('list', description=list_msg, help=list_msg)
+parser_get = subparser.add_parser(
+    'get', description=get_msg, help=get_msg, allow_abbrev=False)
+parser_get.add_argument('show_id', type=int, help='Show ID to download')
+parser_get.add_argument('-i', '--info', action='store_true',
+                        help='Print detailed show information')
+parser_get.add_argument('-o', '--output-dir', type=os.path.abspath,
+                        nargs='?', help='Set download dir', dest='output')
+parser_get.add_argument('--test', action='store_true',
+                        help='Print test information, but do not download')
+parser_list = subparser.add_parser(
+    'list', description=list_msg, help=list_msg, allow_abbrev=False)
 parser_list.set_defaults(func=get_list)
 parser_list.add_argument('--live', action='store_true',
                          dest='live', help='List currently shows on air')
