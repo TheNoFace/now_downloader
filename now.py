@@ -44,14 +44,14 @@ def check_url(url, id, no_msg=False, msg=False, exit=False):
         response = urllib.request.urlopen(url)
     except urllib.error.HTTPError as e:
         if no_msg is False:
-            print(text % (show_id, e.code), file=sys.stderr)
+            print(text % (id, e.code), file=sys.stderr)
         if exit is True:
             sys.exit()
         else:
             pass
     except urllib.error.URLError as e:
         if no_msg is False:
-            print(text % (show_id, e.reason), file=sys.stderr)
+            print(text % (id, e.reason), file=sys.stderr)
         if exit is True:
             sys.exit()
         else:
@@ -78,8 +78,7 @@ def get_list(live=False):
         livelist_json = json.loads(livelist.read().decode('utf-8'))
         contentList, contentId = livelist_json.get('liveList'), []
         for i in range(len(contentList)):
-            contentId.append(contentList[i].get('contentId'))
-        sys.exit(contentId)
+            contentId.append(int(contentList[i].get('contentId')))
     else:
         bannertable = check_url(bannertable_link, '')
         bannertable_json = json.loads(bannertable.read().decode('utf-8'))
@@ -87,8 +86,38 @@ def get_list(live=False):
         for i in range(len(contentList)):
             banners = contentList[i].get('banners')
             for n in range(len(banners)):
-                contentId.append(banners[n].get('contentId'))
-        sys.exit(contentId)
+                contentId.append(int(banners[n].get('contentId')))
+
+    contentId.sort()
+    n = 1
+    print()
+    for id in contentId:
+        print("%d | %d" % (n, int(id)))
+        n += 1
+    print()
+
+    ask_to_proceed('Proceed to download? (Y/N): ', exit=True)
+    try:
+        id = int(input('Please enter the show ID to download (NOT LIST #!): '))
+    except ValueError:
+        sys.exit('ERROR: Invalid Input')
+
+    if id in contentId:
+        path = os.getcwd()
+        msg = 'Do you want to download into \'' + str(path) + '\'? (Y/N): '
+        if ask_to_proceed(msg) is False:
+            try:
+                path = os.path.abspath(input('Enter directory to download: '))
+                print('Overrided download dir: %s' % path)
+            except ValueError:
+                sys.exit('ERROR: Invalid Input')
+        else:
+            print('Download dir: %s' % path)
+
+        print()
+        main(show_id=id, path=path)
+    else:
+        sys.exit('ERROR: Show %d not found' % id)
 
 
 def main(show_id=None, test_run=False, path=None):
@@ -98,8 +127,8 @@ def main(show_id=None, test_run=False, path=None):
     except NameError:
         show_link = now_link
 
-    content_link = show_link + 'content'
-    livestatus_link = show_link + 'livestatus'
+    # content_link = show_link + 'content'
+    # livestatus_link = show_link + 'livestatus'
 
     show_json_response = check_url(show_link, show_id, exit=True)
     if show_json_response:
