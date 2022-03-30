@@ -34,13 +34,13 @@ def get_stream(url, name, test=False):
 
 def check_url(url, id, no_msg=False, msg=False, exit=False):
     if msg:
-        text = msg + ' of show ID %d is not accessible (%d)'
+        text = 'ERROR: ' + msg + ' of show ID %d is not accessible (%d)'
     else:
-        text = 'URL of show ID %d is not accessible (%d)'
+        text = 'ERROR: URL of show ID %d is not accessible (%d)'
 
     try:
         if not url:
-            sys.exit(print('ERROR: hls_url is empty!', file=sys.stderr))
+            sys.exit(print('ERROR: URL is empty!', file=sys.stderr))
         response = urllib.request.urlopen(url)
     except urllib.error.HTTPError as e:
         if no_msg is False:
