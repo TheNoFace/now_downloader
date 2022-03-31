@@ -16,6 +16,23 @@ bannertable_link = now_link + 'bannertable'
 livelist_link = now_link + 'livelist'
 
 
+def renamer(string):
+    # ¨ ¤ ø ; « » ¿ ÷ ¦ -> UTF-8
+    # “ ⁎ ∕ ꞉ ＜ ＞ ？ ⧵ ⏐ -> UTF-16
+    # https://mythofechelon.co.uk/blog/2020/3/6/how-to-work-around-windows-restricted-characters
+    if sys.platform == 'win32':
+        invalid_char = {'"': '“', '*': '⁎', '/': '∕', ':': '꞉',
+                        '<': '＜', '>': '＞', '?': '？', '\\': '⧵', '|': '⏐'}
+    elif sys.platform == 'linux':
+        invalid_char = {'/': '∕'}
+
+    for i in string:
+        if i in invalid_char:
+            string = string.replace(i, invalid_char.get(i))
+
+    return string
+
+
 def get_stream(url, name, path, test=False):
     if sys.platform == 'win32':
         name = str(path) + '\\' + name
@@ -23,6 +40,8 @@ def get_stream(url, name, path, test=False):
         name = str(path) + '/' + name
     else:
         sys.exit('ERROR: Unknown platform (%s)' % sys.platform)
+
+    name = renamer(name)
     print('Downloading... Press Q or Ctrl+Z to quit.\nOutput: %s.ts' % name)
 
     if test is False:
