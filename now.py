@@ -17,7 +17,12 @@ livelist_link = now_link + 'livelist'
 
 
 def get_stream(url, name, path, test=False):
-    name = str(path) + '\\' + name
+    if sys.platform == 'win32':
+        name = str(path) + '\\' + name
+    elif sys.platform == 'linux':
+        name = str(path) + '/' + name
+    else:
+        sys.exit('ERROR: Unknown platform (%s)' % sys.platform)
     print('Downloading... Press Q or Ctrl+Z to quit.\nOutput: %s.ts' % name)
 
     if test is False:
