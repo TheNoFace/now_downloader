@@ -10,7 +10,7 @@ import ffmpeg
 import sys
 import os.path
 
-version = '22.03.30'
+version = '22.03.31'
 now_link = 'https://apis.naver.com/now_web/nowapi-xhmac/nnow/v2/stream/'
 bannertable_link = now_link + 'bannertable'
 livelist_link = now_link + 'livelist'
