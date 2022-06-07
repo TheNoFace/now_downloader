@@ -10,7 +10,7 @@ import ffmpeg
 import sys
 import os.path
 
-version = '22.03.31'
+version = '22.06.07'
 now_link = 'https://apis.naver.com/now_web/nowapi-xhmac/nnow/v2/stream/'
 bannertable_link = now_link + 'bannertable'
 livelist_link = now_link + 'livelist'
@@ -33,7 +33,18 @@ def renamer(string):
     return string
 
 
+def tag_parse(string):
+    invalid_char = {'\r': '', '\n': ' '}
+
+    for i in string:
+        if i in invalid_char:
+            string = string.replace(i, invalid_char.get(i))
+
+    return string
+
+
 def get_stream(url, name, path, test=False):
+    name = renamer(name)
     if sys.platform == 'win32':
         name = str(path) + '\\' + name
     elif sys.platform == 'linux':
@@ -41,7 +52,6 @@ def get_stream(url, name, path, test=False):
     else:
         sys.exit('ERROR: Unknown platform (%s)' % sys.platform)
 
-    name = renamer(name)
     print('Downloading... Press Q or Ctrl+Z to quit.\nOutput: %s.ts' % name)
 
     if test is False:
@@ -52,6 +62,7 @@ def get_stream(url, name, path, test=False):
             .overwrite_output()
             .run(capture_stderr=True)
         )
+        sys.exit()
     else:
         sys.exit('\n** In Test Run **\nInput URL: %s' % url)
 
@@ -113,13 +124,31 @@ def get_list(live=False):
                 contentId.append(int(banners[n].get('contentId')))
 
     contentId.sort()
-    n = 1
-    print()
-    for id in contentId:
-        print("%d | %d" % (n, int(id)))
-        n += 1
-    print()
 
+    id_list = str(contentId[0])
+    for i in range(1, len(contentId)):
+        id_list += ',' + str(contentId[i])
+
+    content_link = now_link + id_list + '/content'
+    content = check_url(content_link, '')
+    content_json = json.loads(content.read().decode('utf-8'))
+
+    show_title, show_host, show_name = [], [], []
+    for i in range(len(contentId)):
+        show_link = now_link + str(contentId[i])
+        show_json_response = check_url(show_link, contentId[i])
+        if show_json_response:
+            show_json = json.loads(show_json_response.read().decode('utf-8'))
+            show_name.append(show_json.get('name'))
+        show_host.append(content_json.get('contentList')[i].get('hosts'))
+        show_title.append(tag_parse(content_json.get('contentList')
+                                    [i].get('title').get('text')))
+
+    print()
+    for i in range(len(contentId)):
+        print("%d | %d | %s | %s | %s" %
+              (i+1, int(contentId[i]), show_name[i], ', '.join(show_host[i]), show_title[i]))
+    print()
     ask_to_proceed('Proceed to download? (Y/N): ', exit=True)
     try:
         id = int(input('Please enter the show ID to download (NOT LIST #!): '))
