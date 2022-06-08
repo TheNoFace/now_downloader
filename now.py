@@ -124,10 +124,7 @@ def get_list(live=False):
                 contentId.append(int(banners[n].get('contentId')))
 
     contentId.sort()
-
-    id_list = str(contentId[0])
-    for i in range(1, len(contentId)):
-        id_list += ',' + str(contentId[i])
+    id_list = ','.join(map(str, contentId))
 
     content_link = now_link + id_list + '/content'
     content = check_url(content_link, '')
@@ -146,8 +143,8 @@ def get_list(live=False):
 
     print()
     for i in range(len(contentId)):
-        print("%d | %d | %s | %s | %s" %
-              (i+1, int(contentId[i]), show_name[i], ', '.join(show_host[i]), show_title[i]))
+        print("%d | %s | %s | %s" % (contentId[i], show_name[i],
+                                     ', '.join(show_host[i]), show_title[i]))
     print()
     ask_to_proceed('Proceed to download? (Y/N): ', exit=True)
     try:
