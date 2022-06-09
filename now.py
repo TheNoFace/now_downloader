@@ -114,7 +114,7 @@ def get_list(live=False):
         contentList, contentId = livelist_json.get('liveList'), []
         for i in range(len(contentList)):
             contentId.append(int(contentList[i].get('contentId')))
-        print("Found total %d on-air shows. Retrieving information..." % len(contentId))
+        print("Found total %d on-air shows" % len(contentId))
     else:
         bannertable = check_url(bannertable_link, '')
         bannertable_json = json.loads(bannertable.read().decode('utf-8'))
@@ -123,7 +123,7 @@ def get_list(live=False):
             banners = contentList[i].get('banners')
             for n in range(len(banners)):
                 contentId.append(int(banners[n].get('contentId')))
-        print("Found total %d available shows. Retrieving information..." % len(contentId))
+        print("Found total %d available shows" % len(contentId))
 
     contentId.sort()
     id_list = ','.join(map(str, contentId))
@@ -132,7 +132,7 @@ def get_list(live=False):
     content = check_url(content_link, '')
     content_json = json.loads(content.read().decode('utf-8'))
 
-    show_title, show_host, show_name = [], [], []
+    show_title, show_host, show_name, count = [], [], [], 0
     for i in range(len(contentId)):
         show_link = now_link + str(contentId[i])
         show_json_response = check_url(show_link, contentId[i])
@@ -142,15 +142,17 @@ def get_list(live=False):
         show_host.append(content_json.get('contentList')[i].get('hosts'))
         show_title.append(tag_parse(content_json.get('contentList')
                                     [i].get('title').get('text')))
+        count += 1
+        print("Retriving information... (%d/%d)" % (count, len(contentId)), end='\r')
 
-    print()
+    print('\n')
     for i in range(len(contentId)):
         print("%d | %s | %s | %s" % (contentId[i], show_name[i],
                                      ', '.join(show_host[i]), show_title[i]))
     print()
     ask_to_proceed('Proceed to download? (Y/N): ', exit=True)
     try:
-        id = int(input('Please enter the show ID to download (NOT LIST #!): '))
+        id = int(input('Please enter the show ID to download: '))
     except ValueError:
         sys.exit('ERROR: Invalid Input')
 
