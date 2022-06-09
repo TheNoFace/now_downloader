@@ -114,6 +114,7 @@ def get_list(live=False):
         contentList, contentId = livelist_json.get('liveList'), []
         for i in range(len(contentList)):
             contentId.append(int(contentList[i].get('contentId')))
+        print("Found total %d on-air shows. Retrieving information..." % len(contentId))
     else:
         bannertable = check_url(bannertable_link, '')
         bannertable_json = json.loads(bannertable.read().decode('utf-8'))
@@ -122,6 +123,7 @@ def get_list(live=False):
             banners = contentList[i].get('banners')
             for n in range(len(banners)):
                 contentId.append(int(banners[n].get('contentId')))
+        print("Found total %d available shows. Retrieving information..." % len(contentId))
 
     contentId.sort()
     id_list = ','.join(map(str, contentId))
