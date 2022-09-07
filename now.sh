@@ -1040,9 +1040,8 @@ function get_list()
 
 	if [ $isListLive = 1 ]
 	then
-		liveList=$(curl -s ${NOW_LINK}/livelist)
-		idList=($(echo "$liveList" | jq -r '.liveList[] | (.contentId|tostring)'))
-		IFS=$'\n'; airTimeList=($(echo "$liveList" | jq '.liveList[] | .tobe')) # https://unix.stackexchange.com/a/184866
+		liveList=$(curl -s "${NOW_LINK/'/stream'/}/naver-main/on-air")
+		idList=($(echo "$liveList" | jq '.[].live_no' | sort -n))
 	elif [ $isListLive = 0 ]
 	then
 		bannerList=$(curl -s ${NOW_LINK}/bannertable)
@@ -1051,6 +1050,8 @@ function get_list()
 	fi
 
 	i=0; n=1
+	# contentIds=$(printf ",%s" "${idList[@]}") # https://stackoverflow.com/a/2317171
+	# content=$(curl -s ${NOW_LINK}/${contentIds:1}/content)
 	for id in "${idList[@]}"
 	do
 		if [ $isListLive = 1 ]
@@ -1063,22 +1064,22 @@ function get_list()
 		content=$(curl -s ${NOW_LINK}/${id}/content)
 		title=$(echo "${content}" | jq -r .contentList[].home.title.text)
 		vcheck=$(echo "${content}" | jq -r '(.contentList[].video|tostring) | sub("false"; "Audio") | sub("true"; "Video")')
-		if [ -z ${airTimeList[$i]} ]
+		airTime=$(curl -s "${NOW_LINK/'/stream'/}/stream-index/${id}" | jq -r .times)
+		if [ -z "${airTime}" ]
 		then
 			output=("${output[@]}" "$id | $vcheck | $title (Unknown)")
 		else
-			output=("${output[@]}" "$id | $vcheck | $title (${airTimeList[$i]//'"'/''})")
+			output=("${output[@]}" "$id | $vcheck | $title (${airTime})")
 		fi
 		((i++)); ((n++))
 	done
 	unset n i
 
 	echo -e "\n"
-	sortedOutput=($(printf "%s\n" "${output[@]}" | sort -n))
 	n=1
-	for (( i=0; i<${#sortedOutput[@]}; i++ ))
+	for (( i=0; i<${#output[@]}; i++ ))
 	do
-		echo "[$n] ${sortedOutput[$i]}"
+		echo "[$n] ${output[$i]}"
 		((n++))
 	done
 	echo
