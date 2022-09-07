@@ -45,7 +45,7 @@ oriIFS=$IFS
 P_LIST=(bc jq curl wget ffmpeg)
 dirList=(content log show chat)
 
-NOW_LINK='https://apis.naver.com/now_web/nowapi-xhmac/nnow/v2/stream'
+NOW_LINK='https://apis.naver.com/now_web/oldnow_web/v4/stream'
 
 SHOW_ID=""
 FORCE=""
