@@ -37,7 +37,7 @@ else
 	NC=""
 fi
 
-NDV="1.5.1"
+NDV="1.6.0"
 BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
 oriIFS=$IFS
@@ -45,7 +45,7 @@ oriIFS=$IFS
 P_LIST=(bc jq curl wget ffmpeg)
 dirList=(content log show chat)
 
-NOW_LINK='https://apis.naver.com/now_web/nowapi-xhmac/nnow/v2/stream'
+NOW_LINK='https://apis.naver.com/now_web/oldnow_web/v4/stream'
 
 SHOW_ID=""
 FORCE=""
@@ -451,12 +451,12 @@ function get_info()
 		exit 6
 	fi
 
-	guest=$(echo "$content" | jq -r '.contentList[] | (.description.clova.guest | join(","))')
+	guest=$(echo "$content" | jq -r '.contentList[] | (.guests | join(","))')
 	if [ -z "$guest" ]
 	then
-		info=$(echo "$content" | jq -r '.contentList[] | .home.title.text + " by " + (.description.clova.host | join(", ")) + "\n\n" + .title.text + "\n\n" + .description.text')
+		info=$(echo "$content" | jq -r '.contentList[] | .home.title.text + " by " + (.hosts | join(", ")) + "\n\n" + .title.text + "\n\n" + .description.text')
 	else
-		info=$(echo "$content" | jq -r '.contentList[] | .home.title.text + " by " + (.description.clova.host | join(", ")) + "\nGuest: " + (.description.clova.guest|join(",")) + "\n\n" + .title.text + "\n\n" + .description.text')
+		info=$(echo "$content" | jq -r '.contentList[] | .home.title.text + " by " + (.hosts | join(", ")) + "\nGuest: " + (.guests | join(",")) + "\n\n" + .title.text + "\n\n" + .description.text')
 	fi
 
 	msg "${info}\n"
@@ -1032,55 +1032,72 @@ function main()
 function get_list()
 {
 	package_check
+	local liveIdList upcomingIdList
 
 	if [ -n "$isError" ]
 	then
 		alert_msg "You have entered unknown argument: $errArg, did you mean '$availableArg'?"
 	fi
 
-	if [ $isListLive = 1 ]
-	then
-		liveList=$(curl -s ${NOW_LINK}/livelist)
-		idList=($(echo "$liveList" | jq -r '.liveList[] | (.contentId|tostring)'))
-		IFS=$'\n'; airTimeList=($(echo "$liveList" | jq '.liveList[] | .tobe')) # https://unix.stackexchange.com/a/184866
-	elif [ $isListLive = 0 ]
-	then
-		bannerList=$(curl -s ${NOW_LINK}/bannertable)
-		idList=($(echo "$bannerList" | jq -r '.contentList[].banners[].contentId'))
-		IFS=$'\n'; airTimeList=($(echo "$bannerList" | jq '.contentList[].banners[].time'))
+	liveList=$(curl -s "${NOW_LINK/'/stream'/}/naver-main/on-air")
+	liveIdList=($(echo "$liveList" | jq '.[].live_no' | sort -n))
+	if [ $isListLive = 0 ];	then
+		bannerList=$(curl -s "${NOW_LINK/'/stream'/}/upcoming-shows")
+		upcomingIdList=($(echo "$bannerList" | jq '.data[].liveNo' | sort -n))
+		# readarray idList < <(echo "$bannerList" | jq '.data[].liveNo' | sort -n)
 	fi
 
-	i=0; n=1
-	for id in "${idList[@]}"
+	n=1
+	# contentIds=$(printf ",%s" "${idList[@]}") # https://stackoverflow.com/a/2317171
+	# content=$(curl -s ${NOW_LINK}/${contentIds:1}/content)
+	if [ $isListLive = 1 ]; then
+		totalIdList=("${liveIdList[@]}")
+	elif [ $isListLive = 0 ]; then
+		totalIdList=("${upcomingIdList[@]}" "${liveIdList[@]}")
+	fi
+
+	for id in "${totalIdList[@]}"
 	do
 		if [ $isListLive = 1 ]
 		then
-			echo -en "Updating live list... ($n/${#idList[@]})\r"
+			echo -en "Updating live list... ($n/${#totalIdList[@]})\r"
 		elif [ $isListLive = 0 ]
 		then
-			echo -en "Updating banner list... ($n/${#idList[@]})\r"
+			echo -en "Updating list... ($n/${#totalIdList[@]})\r"
 		fi
 		content=$(curl -s ${NOW_LINK}/${id}/content)
 		title=$(echo "${content}" | jq -r .contentList[].home.title.text)
 		vcheck=$(echo "${content}" | jq -r '(.contentList[].video|tostring) | sub("false"; "Audio") | sub("true"; "Video")')
-		if [ -z ${airTimeList[$i]} ]
+		airTime=$(curl -s "${NOW_LINK/'/stream'/}/stream-index/${id}" | jq -r .times)
+		if [ -z "${airTime}" ]
 		then
 			output=("${output[@]}" "$id | $vcheck | $title (Unknown)")
 		else
-			output=("${output[@]}" "$id | $vcheck | $title (${airTimeList[$i]//'"'/''})")
+			output=("${output[@]}" "$id | $vcheck | $title (${airTime})")
 		fi
 		((i++)); ((n++))
 	done
-	unset n i
 
 	echo -e "\n"
-	sortedOutput=($(printf "%s\n" "${output[@]}" | sort -n))
 	n=1
-	for (( i=0; i<${#sortedOutput[@]}; i++ ))
-	do
-		echo "[$n] ${sortedOutput[$i]}"
-		((n++))
-	done
+	if [ $isListLive = 1 ]; then
+		for (( i=0; i<${#output[@]}; i++ )); do
+			echo "[$n] ${output[$i]}"
+			((n++))
+		done
+	else
+		echo "** 방송 예정(Upcoming shows) **"
+		for (( i=0; i<${#upcomingIdList[@]}; i++ )); do
+			echo "[$n] ${output[$i]}"
+			((n++))
+		done
+		n=1
+		echo -e "\n** 방송 중 (On-air shows) **"
+		for (( i=${#upcomingIdList}; i<${#totalIdList[@]}; i++ )); do
+			echo "[$n] ${output[$i]}"
+			((n++))
+		done
+	fi
 	echo
 	proceed_download
 }
@@ -1101,7 +1118,7 @@ function proceed_download()
 				idList=("${SHOW_ID}")
 			fi
 
-			for id in "${idList[@]}"
+			for id in "${totalIdList[@]}"
 			do
 				if [[ ${id} -eq ${SHOW_ID} ]]
 				then
