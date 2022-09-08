@@ -1032,34 +1032,38 @@ function main()
 function get_list()
 {
 	package_check
+	local liveIdList upcomingIdList
 
 	if [ -n "$isError" ]
 	then
 		alert_msg "You have entered unknown argument: $errArg, did you mean '$availableArg'?"
 	fi
 
-	if [ $isListLive = 1 ]
-	then
-		liveList=$(curl -s "${NOW_LINK/'/stream'/}/naver-main/on-air")
-		idList=($(echo "$liveList" | jq '.[].live_no' | sort -n))
-	elif [ $isListLive = 0 ]
-	then
+	liveList=$(curl -s "${NOW_LINK/'/stream'/}/naver-main/on-air")
+	liveIdList=($(echo "$liveList" | jq '.[].live_no' | sort -n))
+	if [ $isListLive = 0 ];	then
 		bannerList=$(curl -s "${NOW_LINK/'/stream'/}/upcoming-shows")
-		idList=($(echo "$bannerList" | jq '.data[].liveNo' | sort -n))
+		upcomingIdList=($(echo "$bannerList" | jq '.data[].liveNo' | sort -n))
 		# readarray idList < <(echo "$bannerList" | jq '.data[].liveNo' | sort -n)
 	fi
-	
-	i=0; n=1
+
+	n=1
 	# contentIds=$(printf ",%s" "${idList[@]}") # https://stackoverflow.com/a/2317171
 	# content=$(curl -s ${NOW_LINK}/${contentIds:1}/content)
-	for id in "${idList[@]}"
+	if [ $isListLive = 1 ]; then
+		totalIdList=("${liveIdList[@]}")
+	elif [ $isListLive = 0 ]; then
+		totalIdList=("${upcomingIdList[@]}" "${liveIdList[@]}")
+	fi
+
+	for id in "${totalIdList[@]}"
 	do
 		if [ $isListLive = 1 ]
 		then
-			echo -en "Updating live list... ($n/${#idList[@]})\r"
+			echo -en "Updating live list... ($n/${#totalIdList[@]})\r"
 		elif [ $isListLive = 0 ]
 		then
-			echo -en "Updating banner list... ($n/${#idList[@]})\r"
+			echo -en "Updating list... ($n/${#totalIdList[@]})\r"
 		fi
 		content=$(curl -s ${NOW_LINK}/${id}/content)
 		title=$(echo "${content}" | jq -r .contentList[].home.title.text)
@@ -1073,15 +1077,27 @@ function get_list()
 		fi
 		((i++)); ((n++))
 	done
-	unset n i
 
 	echo -e "\n"
 	n=1
-	for (( i=0; i<${#output[@]}; i++ ))
-	do
-		echo "[$n] ${output[$i]}"
-		((n++))
-	done
+	if [ $isListLive = 1 ]; then
+		for (( i=0; i<${#output[@]}; i++ )); do
+			echo "[$n] ${output[$i]}"
+			((n++))
+		done
+	else
+		echo "** 방송 예정(Upcoming shows) **"
+		for (( i=0; i<${#upcomingIdList[@]}; i++ )); do
+			echo "[$n] ${output[$i]}"
+			((n++))
+		done
+		n=1
+		echo -e "\n** 방송 중 (On-air shows) **"
+		for (( i=${#upcomingIdList}; i<${#totalIdList[@]}; i++ )); do
+			echo "[$n] ${output[$i]}"
+			((n++))
+		done
+	fi
 	echo
 	proceed_download
 }
@@ -1102,7 +1118,7 @@ function proceed_download()
 				idList=("${SHOW_ID}")
 			fi
 
-			for id in "${idList[@]}"
+			for id in "${totalIdList[@]}"
 			do
 				if [[ ${id} -eq ${SHOW_ID} ]]
 				then
