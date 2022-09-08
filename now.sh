@@ -451,12 +451,12 @@ function get_info()
 		exit 6
 	fi
 
-	guest=$(echo "$content" | jq -r '.contentList[] | (.description.clova.guest | join(","))')
+	guest=$(echo "$content" | jq -r '.contentList[] | (.guests | join(","))')
 	if [ -z "$guest" ]
 	then
-		info=$(echo "$content" | jq -r '.contentList[] | .home.title.text + " by " + (.description.clova.host | join(", ")) + "\n\n" + .title.text + "\n\n" + .description.text')
+		info=$(echo "$content" | jq -r '.contentList[] | .home.title.text + " by " + (.hosts | join(", ")) + "\n\n" + .title.text + "\n\n" + .description.text')
 	else
-		info=$(echo "$content" | jq -r '.contentList[] | .home.title.text + " by " + (.description.clova.host | join(", ")) + "\nGuest: " + (.description.clova.guest|join(",")) + "\n\n" + .title.text + "\n\n" + .description.text')
+		info=$(echo "$content" | jq -r '.contentList[] | .home.title.text + " by " + (.hosts | join(", ")) + "\nGuest: " + (.guests | join(",")) + "\n\n" + .title.text + "\n\n" + .description.text')
 	fi
 
 	msg "${info}\n"
