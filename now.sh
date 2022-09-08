@@ -1044,11 +1044,11 @@ function get_list()
 		idList=($(echo "$liveList" | jq '.[].live_no' | sort -n))
 	elif [ $isListLive = 0 ]
 	then
-		bannerList=$(curl -s ${NOW_LINK}/bannertable)
-		idList=($(echo "$bannerList" | jq -r '.contentList[].banners[].contentId'))
-		IFS=$'\n'; airTimeList=($(echo "$bannerList" | jq '.contentList[].banners[].time'))
+		bannerList=$(curl -s "${NOW_LINK/'/stream'/}/upcoming-shows")
+		idList=($(echo "$bannerList" | jq '.data[].liveNo' | sort -n))
+		# readarray idList < <(echo "$bannerList" | jq '.data[].liveNo' | sort -n)
 	fi
-
+	
 	i=0; n=1
 	# contentIds=$(printf ",%s" "${idList[@]}") # https://stackoverflow.com/a/2317171
 	# content=$(curl -s ${NOW_LINK}/${contentIds:1}/content)
