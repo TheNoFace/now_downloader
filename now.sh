@@ -37,7 +37,7 @@ else
 	NC=""
 fi
 
-NDV="1.6.0"
+NDV="1.6.1"
 BANNER="Now Downloader v$NDV"
 SCRIPT_NAME=$(basename $0)
 oriIFS=$IFS
@@ -823,7 +823,7 @@ function exrefresh()
 	content=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.json")
 	livestatus=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}_livestatus.json")
 
-	showhost=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}_content.json" | jq -r '.contentList[] | (.description.clova.host | join(", "))')
+	showhost=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}_content.json" | jq -r '.contentList[] | (.hosts | join(", "))')
 	vcheck=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}_content.json" | jq -r .contentList[].video)
 	title=$(echo "${content}" | jq -r .name)
 	url=$(echo "${content}" | jq -r .hls_url)
@@ -1086,7 +1086,7 @@ function get_list()
 			((n++))
 		done
 	else
-		echo "** 방송 예정(Upcoming shows) **"
+		echo "** 방송 예정 (Upcoming shows) **"
 		for (( i=0; i<${#upcomingIdList[@]}; i++ )); do
 			echo "[$n] ${output[$i]}"
 			((n++))
@@ -1115,7 +1115,7 @@ function proceed_download()
 				echo -n "Please enter the show ID to download (NOT LIST #!): "
 				read SHOW_ID
 			else
-				idList=("${SHOW_ID}")
+				totalIdList=("${SHOW_ID}")
 			fi
 
 			for id in "${totalIdList[@]}"
