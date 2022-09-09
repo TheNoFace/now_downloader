@@ -1115,7 +1115,7 @@ function proceed_download()
 				echo -n "Please enter the show ID to download (NOT LIST #!): "
 				read SHOW_ID
 			else
-				idList=("${SHOW_ID}")
+				totalIdList=("${SHOW_ID}")
 			fi
 
 			for id in "${totalIdList[@]}"
