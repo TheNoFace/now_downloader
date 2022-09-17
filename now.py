@@ -186,7 +186,9 @@ def main(show_id=None, test_run=False, path=None):
         current_date = time.strftime('%Y%m%d')
         show_json = json.loads(show_json_response.read().decode('utf-8'))
         show_json = show_json.get('contentList')[0]
-        hls_url = show_json.get('streamUrl')
+        hls_url = show_json.get('videoStreamUrl')
+        if not hls_url:
+            hls_url = show_json.get('streamUrl')
         show_name = show_json.get('home').get('title').get('text')
         show_ep = str(show_json.get('count').replace('회', ''))
         show_title = tag_parse(show_json.get('title').get('text'))
