@@ -11,9 +11,9 @@ import sys
 import os.path
 
 version = '22.06.08'
-now_link = 'https://apis.naver.com/now_web/nowapi-xhmac/nnow/v2/stream/'
-bannertable_link = now_link + 'bannertable'
-livelist_link = now_link + 'livelist'
+now_link = 'https://apis.naver.com/now_web/oldnow_web/v4/stream/'
+bannertable_link = now_link.replace("stream/", "upcoming-shows")
+livelist_link = now_link.replace("stream/", "naver-main/on-air")
 
 
 def renamer(string):
@@ -111,39 +111,35 @@ def get_list(live=False):
     if live is True:
         livelist = check_url(livelist_link, '')
         livelist_json = json.loads(livelist.read().decode('utf-8'))
-        contentList, contentId = livelist_json.get('liveList'), []
-        for i in range(len(contentList)):
-            contentId.append(int(contentList[i].get('contentId')))
+        contentId = []
+        for i in range(len(livelist_json)):
+            contentId.append(int(livelist_json[i].get('live_no')))
         print("Found total %d on-air shows" % len(contentId))
     else:
         bannertable = check_url(bannertable_link, '')
         bannertable_json = json.loads(bannertable.read().decode('utf-8'))
-        contentList, contentId = bannertable_json.get('contentList'), []
-        for i in range(len(contentList)):
-            banners = contentList[i].get('banners')
-            for n in range(len(banners)):
-                contentId.append(int(banners[n].get('contentId')))
-        print("Found total %d available shows" % len(contentId))
+        contentId = []
+        for i in range(len(bannertable_json.get('data'))):
+            contentId.append(
+                int(bannertable_json.get('data')[i].get('liveNo')))
+        print("Found total %d upcoming shows shows" % len(contentId))
 
     contentId.sort()
-    id_list = ','.join(map(str, contentId))
-
-    content_link = now_link + id_list + '/content'
-    content = check_url(content_link, '')
-    content_json = json.loads(content.read().decode('utf-8'))
 
     show_title, show_host, show_name, count = [], [], [], 0
     for i in range(len(contentId)):
-        show_link = now_link + str(contentId[i])
+        show_link = now_link + str(contentId[i]) + '/content'
         show_json_response = check_url(show_link, contentId[i])
         if show_json_response:
             show_json = json.loads(show_json_response.read().decode('utf-8'))
-            show_name.append(show_json.get('name'))
-        show_host.append(content_json.get('contentList')[i].get('hosts'))
-        show_title.append(tag_parse(content_json.get('contentList')
-                                    [i].get('title').get('text')))
+            show_name.append(show_json.get('contentList')[0].
+                             get('home').get('title').get('text'))
+            show_host.append(show_json.get('contentList')[0].get('hosts'))
+            show_title.append(tag_parse(show_json.get(
+                              'contentList')[0].get('title').get('text')))
         count += 1
-        print("Retriving information... (%d/%d)" % (count, len(contentId)), end='\r')
+        print("Retriving information... (%d/%d)" %
+              (count, len(contentId)), end='\r')
 
     print('\n')
     for i in range(len(contentId)):
