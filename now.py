@@ -10,7 +10,7 @@ import ffmpeg
 import sys
 import os.path
 
-version = '22.06.08'
+version = '22.09.17'
 now_link = 'https://apis.naver.com/now_web/oldnow_web/v4/stream/'
 bannertable_link = now_link.replace("stream/", "upcoming-shows")
 livelist_link = now_link.replace("stream/", "naver-main/on-air")
