@@ -173,7 +173,7 @@ def get_list(live=False):
 def main(show_id=None, test_run=False, path=None):
     try:
         if bool(show_id):
-            show_link = now_link + str(show_id)
+            show_link = now_link + str(show_id) + '/content'
     except NameError:
         show_link = now_link
 
@@ -185,16 +185,17 @@ def main(show_id=None, test_run=False, path=None):
         current_time = time.strftime('%H%M%S')
         current_date = time.strftime('%Y%m%d')
         show_json = json.loads(show_json_response.read().decode('utf-8'))
-        hls_url = show_json.get('hls_url')
-        show_name = show_json.get('name')
-        show_ep = str(show_json.get('no'))
-        show_title = show_json.get('episode_name').replace('\r\n', ' ')
-        show_info = show_json.get('episode_description')
+        show_json = show_json.get('contentList')[0]
+        hls_url = show_json.get('streamUrl')
+        show_name = show_json.get('home').get('title').get('text')
+        show_ep = str(show_json.get('count').replace('회', ''))
+        show_title = tag_parse(show_json.get('title').get('text'))
+        show_info = show_json.get('description').get('text')
         filename = current_date + '.NAVER NOW.' + show_name + \
             '.E' + show_ep + '.' + show_title + '_' + current_time
 
-        print('%s (E%s)\nTitle: %s\n%s\n\n%s\n'
-              % (show_name, show_ep, show_title, hls_url, show_info))
+        print('\n%s (E%s): %s\n%s\n\n%s\n' %
+              (show_name, show_ep, show_title, hls_url, show_info))
 
         try:
             if bool(print_info):
