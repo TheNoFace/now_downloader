@@ -577,11 +577,10 @@ function contentget()
 {
 	"${wget_c[@]}" -O "${OPATH}/content/${SHOW_ID}_${d_date}_livestatus.json" ${NOW_LINK}/${SHOW_ID}/livestatus
 	"${wget_c[@]}" -O "${OPATH}/content/${SHOW_ID}_${d_date}_content.json" ${NOW_LINK}/${SHOW_ID}/content
-	"${wget_c[@]}" -O "${OPATH}/content/${SHOW_ID}_${d_date}.json" ${NOW_LINK}/${SHOW_ID}
 
 	if [ -z $ITG_CHECK ]
 	then
-		ctlength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}.json" | awk '{print $1}')
+		ctlength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}_content.json" | awk '{print $1}')
 		lslength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}_livestatus.json" | awk '{print $1}')
 		msg "content: $ctlength Bytes / livestatus: $lslength Bytes"
 		if [ "$ctlength" -lt 1500 ] && [ "$lslength" -lt 1000 ]
@@ -598,8 +597,8 @@ function contentget()
 				((CTRETRY++))
 				msg "\n재시도 횟수: $CTRETRY / 최대 재시도 횟수: $MAXRETRY\n"
 				"${wget_c[@]}" -O "${OPATH}/content/${SHOW_ID}_${d_date}_livestatus.json" ${NOW_LINK}/${SHOW_ID}/livestatus
-				"${wget_c[@]}" -O "${OPATH}/content/${SHOW_ID}_${d_date}.json" ${NOW_LINK}/${SHOW_ID}
-				ctlength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}.json" | awk '{print $1}')
+				"${wget_c[@]}" -O "${OPATH}/content/${SHOW_ID}_${d_date}_content.json" ${NOW_LINK}/${SHOW_ID}/content
+				ctlength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}_content.json" | awk '{print $1}')
 				lslength=$(wc -c "${OPATH}/content/${SHOW_ID}_${d_date}_livestatus.json" | awk '{print $1}')
 				msg "content: $ctlength Bytes / livestatus: $lslength Bytes"
 				if [ "$ctlength" -lt 1500 ] && [ "$lslength" -lt 1000 ]
@@ -643,9 +642,9 @@ function contentget()
 
 function content_backup()
 {
+	timeupdate
 	mv "${OPATH}/content/${SHOW_ID}_${d_date}_content.json" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_${CTIME}_content.json"
 	mv "${OPATH}/content/${SHOW_ID}_${d_date}_livestatus.json" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_${CTIME}_livestatus.json"
-	mv "${OPATH}/content/${SHOW_ID}_${d_date}.json" "${OPATH}/content/_ERR_${SHOW_ID}_${d_date}_${CTIME}.json"
 }
 
 function getstream()
@@ -654,7 +653,7 @@ function getstream()
 
 	if [ $RETRY = 0 ]
 	then
-		INFO=$(jq -r .episode_description "${OPATH}/content/${SHOW_ID}_${d_date}.json")
+		INFO=$(jq -r .contentList[].description.text "${OPATH}/content/${SHOW_ID}_${d_date}_content.json")
 		echo -e "Host: ${showhost}\nEP: $ep\n\n$subject\n\n$INFO" > "${OPATH}/show/$title/${d_date}_${showhost}_Info.txt"
 	fi
 
@@ -820,18 +819,25 @@ function renamer()
 function exrefresh()
 {
 	unset url title startdate starttime
-	content=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}.json")
+	content=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}_content.json")
 	livestatus=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}_livestatus.json")
 
-	showhost=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}_content.json" | jq -r '.contentList[] | (.hosts | join(", "))')
-	vcheck=$(cat "${OPATH}/content/${SHOW_ID}_${d_date}_content.json" | jq -r .contentList[].video)
-	title=$(echo "${content}" | jq -r .name)
-	url=$(echo "${content}" | jq -r .hls_url)
-	ORI_DATE=$(echo "${content}" | jq .start_time | xargs -i date -d {} +%s) # Seconds since 1970-01-01 00:00:00 UTC
+	showhost=$(echo "${content}" | jq -r '.contentList[] | (.hosts | join(", "))')
+	vcheck=$(echo "${content}"  | jq -r .contentList[].video)
+	title=$(echo "${content}" | jq -r .contentList[].home.title.text)
+	if [ ${vcheck} == 'true' ]
+	then
+		url=$(echo "${content}" | jq -r .contentList[].videoStreamUrl)
+	else
+		url=$(echo "${content}" | jq -r .contentList[].streamUrl)
+	fi
+	# Seconds since 1970-01-01 00:00:00 UTC
+	ORI_DATE=$(echo "${content}" | jq -r .contentList[].start | grep -Eo '[0-9]{1,10}' | head -n 1)
+	# ORI_DATE=$(echo "${ORI_DATE:0:10}") # Seconds since 1970-01-01 00:00:00 UTC
 	startdate=$(date -d @$ORI_DATE +'%y%m%d')
 	starttime=$(date -d @$ORI_DATE +'%H%M%S')
-	subject=$(echo "${content}" | jq .episode_name)
-	ep=$(echo "${content}" | jq -r .no)
+	subject=$(echo "${content}" | jq .contentList[].title.text)
+	ep=$(echo "${content}" | jq -r .contentList[].count | grep -Eo '[0-9]{1,}')
 	STATUS=$(echo "${livestatus}" | jq -r .status.status) # READY | END | ONAIR
 
 	renamer "${subject}" subject
